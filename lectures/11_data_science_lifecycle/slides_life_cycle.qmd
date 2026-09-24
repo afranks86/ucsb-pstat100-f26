@@ -1,0 +1,571 @@
+---
+title: "PSTAT 100 - Data Science Concepts and Analysis"
+format: 
+  revealjs:
+    theme: default
+    slide-number: true
+    preview-links: auto
+    embed-resources: true
+    scrollable: true
+    width: 1280
+knitr:
+  opts_chunk:
+    fig.align: center
+execute:
+  eval: true
+  echo: true
+---
+
+```{r, echo=FALSE}
+library(tidyverse)
+```
+
+
+## Welcome to PSTAT 100!
+
+- Syllabus
+
+- Data Science Life Cycle
+
+- Data and Story-telling
+
+# Syllabus 
+
+## People
+
+- Instructor: Alexander Franks, PhD
+
+. . . 
+
+- Teaching Assistant: Claire Gan
+- Teaching Assistant: Yuting Ma
+- Teaching Assistant: Yaoyuan Xu
+
+
+## Assessments
+
+Homework + In-person exams + Weekly Quizzes 
+
+. . . 
+
+- **Homework** (4*12.5% = 50% final grade weight)
+    - Applications of course ideas and lab skills to analysis of real data sets
+    - 4 assignments, released/due ~biweekly
+    - 75% partial credit for late work. No points beyond 72 hours after the deadline.
+
+## Homework case studies: a preview
+
+## Case study 1: ACE and health
+
+Association between Adverse Childhood Experiences (ACE) and general health.
+
+<center>![](figures/brfs.png){width=80%}</center>
+
+## Case study 1: ACE and health
+
+You will:
+
+- Process 10K survey responses from CDC's Behavioral Risk Factor Surveillance System (BRFSS)
+
+## Case study 2: SEDA
+
+**Stanford Education Data Archive**
+
+Relationship between education achievement gaps and socioeconomic indicators.
+<center>![](figures/seda.png){width=80%}</center>
+
+## Case study 3: Discrimination at DDS?
+
+Apparent disparity in allocation of California Department of Developmental Services (DDS) benefits across racial groups.
+
+> *...the average annual spending on Hispanic consumers was approximately one-third of that on White non-Hispanic consumers...*
+
+Is there systematic discrimination, or are we not assessing the data carefully enough?
+
+## Case study 4: Paleoclimatology
+
+How diatom abundance reveals climate condition changes long time ago.
+
+(Diatoms are one type of algae with glass bodies. They preserve extraordinarily well over time).
+
+<center>![](figures/diatoms-sciam.jpg){width=50%}</center>
+
+Analyze diatom relative abundances from ocean sediment cores (tubes of ocean mud) spanning ~15k years.
+
+
+## Assessments: Exams
+
+- **In-person, closed-book exams** (20+30 = 50% final grade weight)
+    - Exams emphasize conceptual understanding, decision-making, and data science principles (not extended mathematical calculation).
+    - Questions can come from lecture slides and homework assignments.
+    - **Midterm (20%):  Tuesday 11/3 In class.** 
+    - **Final (30%): Monday 12/7 at 12pm. **
+
+## Assessments: Exams
+
+Midterm: Fall 25
+
+<center>![](figures/mid_F25.png){width=75%}</center>
+
+Final: Fall 25
+
+<center>![](figures/final_F25.png){width=75%}</center>
+
+    
+## Assessments: Quizzes
+
+- Weekly in-class quizzes starting the week 10/6
+
+- 8 quizzes, lowest 2 scores dropped
+
+- Approximately three or four multiple choice or true/false questions to check basic comprehension
+
+- 20% of final course grade
+
+## Office Hours
+
+Please check the syllabus file on Canvas.
+
+## AI policy
+
+- You may consult AI for help but **all written answers must be in your own words**
+
+- **Students caught directly copy and pasting AI content into their assignments will be given a zero.**
+
+- Better understanding of the subject leads to better usage of the tools.
+
+- We, rather than tools, will be responsible for our decisions and their consequences.
+
+- In job interviews they may ask you to explain AI generated code
+
+## Tentative schedule
+
+- Week 1-2: the Tidy data standard and `tidyverse`
+- Week 3-4: Sampling, study design and missingness.
+- Week 5: Data visualization
+- Week 6: Uncertainty Quantification
+- Week 8-10: Linear regression, logistic regression, data privacy, principal component analysis and parallel computing.
+
+# Data Science Life Cycle
+
+## Scope
+
+This course develops our data science toolkit by focusing on three essential skill areas:
+
+- **Communication**: Designs and goals of a study, visualization
+
+. . . 
+
+- **Mathematics**: *engineering* math. Please review basic linear algebra (matrix, eigenvalue) and calculus.
+
+. . . 
+
+- **Computing**: Build data pipelines. Simulation-based method evaluation. Extensive `R` coding. 
+
+- **Ethics**: The responsible collection, analysis, and application of data to protect individual rights and prevent societal harm
+
+This class emphasizes the connections between math, code, data and ethics.
+
+## Data science lifecycle
+
+. . . 
+
+There is a consensus that doing data science involves proceeding through a **lifecycle**: *a repeated sequence of steps.*
+
+- Less consensus at the moment about how many steps and what they are. Below is a chart from Yu and Barter, 2024.
+
+<center>![](figures/dslc-yu.png){width=50%}</center>
+
+## Illustrating the cycle
+
+We'll walk through a very simple example to get a concrete idea of how the cycle works. 
+
+. . . 
+
+**Question**: *Do large animals have larger brains? How much larger?*
+
+You will see some code displayed as we walk through the example.
+
+Don't worry about understanding them---that's what this course is for.
+
+
+## Step 0: Domain problem
+
+There are lots of datasets out there with brain and body **weight** measurements, let's make the question a bit more specific.
+
+- *What is the relationship between an animal's brain and body weight?*
+
+. . . 
+
+Other aspects of brain–body relationships can also be intriguing, but we are starting small.
+
+
+## Step 1: Collect 
+
+Acquire a publicly available dataset comprising average body and brain weights for 62 mammals. 
+
+```{r}
+# import brain and body weights
+bb_weights <- read_csv('data/allison1976.csv') |> select(1:3)
+head(bb_weights, n=5)
+```
+
+**Units of measurement**
+
+- body weight in kilograms
+
+- brain weight in grams
+
+## Step 2: Acquaint
+
+_**Especially because we didn't collect this data ourselves**_, we should do a little background research to understand where the data came from (Allison *et al.* 1976) and what limitations might exist:
+
+. . . 
+
+- Information on mammals only: no data on birds, fish, reptiles, etc.
+
+- Species were not chosen to represent all mammals: probably shouldn’t generalize.
+
+## Step 3: Tidy---Clean up and organize
+
+This dataset is already impeccably neat: each row is an observation for some mammal, and the columns are the two variables (average weights). 
+
+. . . 
+
+So no tidying needed---we'll just check the dimensions and see if any values are missing.
+
+```{r}
+# dimensions?
+dim(bb_weights)
+```
+
+```{r}
+# missing values?
+colSums(is.na(bb_weights))
+```
+
+## Step 4: Explore
+
+Look for patterns, structure, properites
+
+Visualization is usually a good starting point. 
+
+:::{.columns}
+```{r, echo=TRUE}
+# plot
+ggplot(bb_weights, aes(x = body_wt, y = brain_wt)) +
+  geom_point() + 
+  theme_minimal()
+```
+:::
+
+How do you feel about this plot? Do you see any patterns?
+
+. . . 
+
+
+Do you see any problems with this presentation?
+
+## Step 4: Explore
+
+A simple axis transformation reveals a clearer pattern. (And the labels encode more information too).
+
+:::{.columns}
+```{r, echo=TRUE}
+ggplot(bb_weights, aes(x = body_wt, y = brain_wt)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  scale_x_log10(name = "body weight (kg)") +
+  scale_y_log10(name = "brain weight (g)")
+```
+:::
+
+## Step 5: Analyze
+
+The plot shows us that there's a roughly linear relationship on the log scale:
+
+$$\log(\text{brain}) = \alpha \log(\text{body}) + c$$
+
+We can use some statistical methods to estimate the parameters $\alpha$ and $c$.
+
+## Step 6: Interpret
+
+So what does that mean in terms of brain and body weights? A little algebra and we have:
+
+$$(\text{brain}) \propto (\text{body})^\alpha$$ 
+
+. . . 
+
+Can someone help me to fill in the math?
+
+. . . 
+
+This is known as a "power-law" relationship: brain weight changes in proportion to a power of body weight.
+
+So it appears that for these 62 mammals, the brain-body scaling is well-described by a power law. (Notice: no generalization/extrapolation!) 
+
+## Next Cycle
+
+We can now engage in question refinement. Do other classes of animal exhibit the same power law relationship? Is it the same or different from class to class?
+
+To investigate, we need richer data.
+
+# Appendix: Power-law of animal brain weights
+
+##
+
+We present the second data science life cycle using the enriched data.
+
+
+## Step 1: Collect
+
+A number of authors have studied this problem, and, lucky us, relevant datasets are publicly available as well.
+
+Below, we’ll import a few of these datasets for three different animal classes.
+
+```{r}
+# import meta analysis datasets
+library(tidyverse)
+reptiles <- read_csv('data/reptile_meta.csv')
+birds <- read_csv('data/bird_meta.csv')
+mammals <- read_csv('data/mammal_meta.csv')
+```
+
+. . . 
+
+```{r}
+head(reptiles, n = 3)
+glimpse(reptiles)
+glimpse(birds)
+```
+
+
+## Step 2: Acquaint
+
+The data we just showed are basically a convenience sample of existing scientific studies.
+
+- Multiple studies: possibly different sampling and measurement protocols.
+
+- Criteria for inclusion unknown: probably neither comprehensive nor representative.
+
+. . . 
+
+So these data, while richer, are still relatively narrow in terms of generalizability.
+
+## Step 3: Tidy
+
+These datasets are still quite neat, but have a few minor things out of order.
+
+```{r}
+# variable names and positions don't quite match up
+# Original: Variable selection and renaming
+rept_vars <- c(1, 2, 3, 4, 8, 10, 12)
+bird_vars <- c(1, 2, 3, 4, 7, 12, 11)
+mammal_vars <- c(1, 2, 3, 4, 7, 15, 12)
+
+```
+
+. . . 
+
+```{r}
+# Rename and combine datasets
+rept <- reptiles |>
+  select(all_of(rept_vars)) |>
+  rename(body = `Body weight (g)`,
+         brain = `Brain weight (g)`) |>
+  mutate(class = "Reptile")
+
+bird <- birds |>
+  select(all_of(bird_vars)) |>
+  rename(body = `Body mass (g)`,
+         brain = `Brain mass (g)`) |>
+  mutate(class = "Bird")
+
+mamm <- mammals |>
+  select(all_of(mammal_vars)) |>
+  rename(body = `Body mass (g)`,
+         brain = `Brain mass (g)`) |>
+  mutate(class = "Mammal")
+
+# Combine datasets
+three_kind <- bind_rows(rept, mamm, bird)
+head(three_kind, 5)
+```
+
+## Step 3: Tidy
+
+In order to combine the datasets:
+
+- Select columns of interest;
+
+- Put in consistent order;
+
+- Give consistent names;
+
+- Combine into one single table.
+
+. . .
+
+We also added one column to indicate the class of animal
+
+```{r}
+summary(three_kind$class)
+```
+
+Opps, we were not careful about the variable type
+
+```{r}
+summary(as.factor(three_kind$class))
+```
+
+## Step 3: Tidy
+
+- This dataset has a number (actually quite a lot) of missing brain weight measurements
+
+```{r}
+# missing values?
+colMeans(is.na(three_kind))
+```
+
+- Many of the studies combined to form these datasets did not include that particular measurement.
+
+## Repeated Measures
+
+There are multiple rows for a single species (from different studies).
+
+```{r}
+three_kind[1:2, ]
+```
+
+```{r}
+# Aggregate by species
+avg_weights <- three_kind |>
+  drop_na() |>
+  group_by(class, Order, Species, Sex) |>
+  summarise(across(c(body, brain), mean)) |>
+  ungroup() |>
+  mutate(log_body = log(body),
+         log_brain = log(brain))
+head(avg_weights)
+avg_weights |> filter(Species == "mississippiensis")
+```
+
+## Step 4: Explore
+
+Looking at a similar plot and overlaying trend lines, we see the same power law relationship but with *different* proportionality constants for the three classes of animal.
+
+::: {.columns}
+```{r}
+# Create final plot with regression lines
+ggplot(avg_weights, aes(x = log_body, y = log_brain, color = class)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal()
+```
+:::
+## Step 5: Analyze
+
+So in this case there are three different linear relationships on the log scale that depend on animal class:
+
+$$(\text{brain}) = \beta_1(\text{body})^{\alpha_1} \qquad \text{(mammal)} \\
+(\text{brain}) = \beta_2(\text{body})^{\alpha_2} \qquad \text{(reptile)} \\
+(\text{brain}) = \beta_3(\text{body})^{\alpha_3} \qquad \text{(bird)} \\
+\beta_i \neq \beta_j, \alpha_i \neq \alpha_j \quad \text{for } i \neq j$$ 
+
+
+# Data Science and story telling
+
+## Data and story telling
+
+<center>![](figures/mark_twain.jpeg){width=50%}</center>
+
+. . . 
+
+A good story connects data to meaning.  
+The challenge is this: do we tell the story we want to tell, or the one that the data spontaneously reveals (if any)?
+
+
+## Cancer Deaths in the US
+
+Do you think cancer deaths (per 100k people) have increased or decreased since 1980?
+
+## What story does the data tell?
+
+::: {.column-page}
+
+```{r}
+cancer_data <- read_csv("data/IHME/IHME_cancer.csv")
+
+cancer_data |> filter(cause_name == "Total cancers",
+                      age_name == "All ages",
+                      metric_name == "Rate",
+                      location_name == "United States of America") |> 
+  ggplot() + geom_line(aes(x=year, y=val)) + 
+  theme_bw() + 
+  ylab("Cancer Deaths (per 100000 people)") + 
+  ggtitle("United States")
+
+```
+
+:::
+
+How do we describe the observed trend?
+
+## What story does the data tell?
+
+::: {.column-page}
+```{r}
+cancer_data <- read_csv("data/IHME/IHME_cancer.csv")
+
+cancer_data |> filter(cause_name == "Total cancers",
+                      age_name == "All ages",
+                      metric_name == "Rate",
+                      location_name %in% c("Japan", "Uganda")) |> 
+  ggplot() + 
+  geom_line(aes(x=year, y=val, col=location_name), linewidth = 1) + 
+  theme_bw() + 
+  scale_color_viridis_d()+
+  ylab("Cancer Deaths (per 100000 people)")
+
+```
+
+:::
+
+Story?
+
+. . . 
+
+Only 2% of Uganda’s population is older than 65, against 30% in Japan.
+
+## What story does the data tell?
+
+::: {.column-page}
+
+```{r}
+cancer_data <- read_csv("data/IHME/IHME_cancer.csv")
+
+cancer_data |> filter(cause_name == "Total cancers",
+                      age_name == "Age-standardized",
+                      metric_name == "Rate") |> 
+  ggplot() + 
+  geom_line(aes(x=year, y=val, col=location_name)) + 
+  geom_point(aes(x=year, y=val, 
+                 shape=location_name,
+                 col=location_name)) + 
+  theme_bw() + 
+  scale_color_viridis_d()+
+  ylab("Cancer Deaths (age-standardized)")
+
+```
+
+:::
+
+. . . 
+
+Age-standardized rates allow us to compare cancer death rates in Uganda and Japan as if they applied to two countries with identical age structures.
+
+## Next
+
+The Tidy data standard and basic data pipeline.
+
+
