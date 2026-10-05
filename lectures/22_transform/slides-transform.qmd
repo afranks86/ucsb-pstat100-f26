@@ -497,6 +497,8 @@ undev |> mutate(across(starts_with("pop_"), \(x) x/total_pop)) |>
 
 ## Naming the columns
 
+To give the mutated variables new names (and keep the old ones) can use `.names`
+
 ```{r}
 undev |> mutate(across(starts_with("pop_"), \(x) x/total_pop, .names = "{.col}_pct")) |> 
   select(country, total_pop, 
@@ -504,6 +506,16 @@ undev |> mutate(across(starts_with("pop_"), \(x) x/total_pop, .names = "{.col}_p
 
 ```
 
+## Dataframe aggregations
+
+Compute the population from 5 to 14:
+
+```{r}
+#| echo: true
+# sum `pop_under5`, `pop_15to64`, and `pop_over65`
+undev |> mutate(pop_5to14 = total_pop - pop_under5 - pop_15to64 - pop_over65) |> 
+  select(country, contains("pop"))
+```
 
 
 ## Aggregation 
@@ -550,162 +562,60 @@ undev |> arrange(desc(parliament_pct_women)) |> slice(1)
 
 ## Dataframe aggregations
 
-How do we find the mean of every column?
-```{r}
-#| echo: true
-# mean of every column
-undev |> summarize(across(everything(), mean))
-```
+How do we find the mean percentage of women in parliament across all countries? 
 
-## Dataframe aggregations
-
-How do we find the mean of every column?
-```{r}
-#| echo: true
-# mean of every column
-undev |> summarize(across(!country, mean))
-```
-
-## Dataframe aggregations
-
-How do we find the mean of every column?
+How do we find the mean of total population across all countries?
 
 ```{r}
 #| echo: true
-# mean of every column
-undev |> summarize(across(!country, mean, na.rm=TRUE))
-
 undev |> summarize(mean_pct_women = mean(parliament_pct_women, na.rm=TRUE), 
                    max_total_pop = max(total_pop))
 
-
 ```
 
 ## Dataframe aggregations
 
-What about the mean of each row? Do we ever want to do this?
+How do we find the mean of every column?
 
-. . . 
-
-Compute the population from 5 to 14:
+`across` makes it easy to apply the same transformation to multiple columns, allowing you to use select() helpers like `everything()` or `!country` to specify which columns to include.
 
 ```{r}
 #| echo: true
-# sum `pop_under5`, `pop_15to64`, and `pop_over65`
-undev |> mutate(pop_5to14 = total_pop - pop_under5 - pop_15to64 - pop_over65) |> 
-  select(country, contains("pop"))
-```
-
-
-## Summarizing
-
-Consider the GDP data
-```{r}
-# read in gdp data
-gdp <- read_csv('data/annual_growth.csv')
-gdp
+# mean of every column? What is the problem?
+undev |> summarize(across(everything(), mean))
 
 ```
-
-. . .
-
-First, we'll conver the GDP data to proportions
-
-
-```{r}
-#| slideshow: {slide_type: fragment}
-#| echo: true
-# convert percentages to multiplicative change
-gdp_prop <- gdp |> drop_na() |> mutate(across(`1961`:`2019`, \(x) x/100 + 1))
-```
-
-## Summarizing
-
-How do we compute the geometric mean of the GDPs in each year, over countries?
-
-```{r}
-# compute geometric mean
-gdp_prop |> summarize(across(`1961`:`2019`, \(x) prod(x)^(1/length(x))))
-```
-What does the geometric mean give us?
-
-## Grouped aggregations
-
-How do compute the *country* with the highest annualized GDP growth for the period 1961-2019?
-
-First we should pivot to create tidy data:
-
-```{r}
-gdp_tidy <- gdp_prop |> 
-  pivot_longer(cols = -c(1:2), names_to="Year", values_to="gdp_prop")
-
-gdp_tidy
-```
-
-## Computing annualized growth
-
-We can do this *grouping by* country and computing the geometric mean of the GDP within each country.
-
-```{r}
-geometric_mean <- \(x) prod(x, na.rm=TRUE)^{1/sum(!is.na(x))}
-
-gdp_tidy |> group_by(`Country Name`, `Country Code`) |>
-  summarize(max_growth = max(gdp_prop), min_growth = min(gdp_prop)) |>
-  ungroup()
-
-gdp_tidy |> mutate(new_col = log(gdp_prop))
-
-gdp_tidy |> group_by(`Country Name`) |> 
-  summarize(annualized_growth_rate = geometric_mean(gdp_prop) -1) |> 
-  arrange(desc(annualized_growth_rate)) |>
-  print(n=5)
-```
-
-Suppose we wanted to compute annualized growth by decade for each country. How could we do it?
-
-## Annualized growth by decade
-
-- Define a decade variable
-
-- Group by country and decade
-
-- Summarize
-
-```{r}
-## Define a decade variable
-gdp_w_decade <- gdp_tidy |> 
-  mutate(date = ymd(paste0(Year, "01-01"))) |> 
-  mutate(decade = floor_date(date, unit=years(10)))
-
-gdp_w_decade
-
-gdp_w_decade |> filter(decade == "1960-01-01" & `Country Name` == "Argentina") |>
-  summarize(geometric_mean(gdp_prop))
-
-```
-
-```{r}
-## group and aggregate
-gdp_decade <- gdp_w_decade |> group_by(`Country Name`, decade) |> 
-  summarize(annualized_growth_rate = geometric_mean(gdp_prop) - 1) 
-
-gdp_decade
-```
-
-## Your turn
-
-*How do you find the country with the highest annualized GDP growth for each decade?*
-
-Write a line of code that would perform this calculation.
 
 . . . 
 
-```{r, echo=TRUE}
-gdp_decade |>  
-  group_by(decade) |> 
-  slice_max(annualized_growth_rate)
+```{r}
+# mean of every column except country, ignoring NA's 
+undev |> summarize(across(!country, \(x) mean(x, na.rm=TRUE)))
 ```
 
+## Summarizing by Group
+
+How do we find the number of songs that each artist had in the top 100?
+
+We can do it for one artist by filtering first, for example:
+
+```{r}
+billboard_long |> 
+  filter(artist == "Eminem") |> 
+  summarize(n_songs = length(unique(track)))
+```
+
+How can we automate this for all artists?
+
+## Summarizing by Group
+
+We can summarize within groups by grouping the data first using `group_by()`.
+
+```{r}
+billboard_long |> group_by(artist) |> 
+  summarize(n_songs = length(unique(track))) |>
+  arrange(desc(n_songs))
+```
 
 ## Finding the highest ranking songs
 
@@ -728,6 +638,131 @@ billboard_long |>
   summarize(weeks_at_number_one = sum(rank == 1, na.rm=TRUE), 
             weeks_in_top_ten = sum(rank <= 10, na.rm=TRUE)) |> 
   arrange(desc(weeks_at_number_one))
+```
+
+## Summarizing GDP data
+
+Consider the GDP data.  How can we compute the "mean annualized GDP"?
+
+
+First let's tidy it.
+
+```{r}
+
+# read in gdp data
+gdp <- read_csv('data/annual_growth.csv')
+
+gdp_tidy <- gdp |> 
+  pivot_longer(cols = `1961`:`2019`, names_to="Year", values_to="GDP")
+
+gdp_tidy
+```
+
+## Summarizing GDP data
+
+Next let's convert the GDP data to growth multipliers (e.g. 5% growth is a multiplier of 1.05)
+
+
+```{r}
+#| slideshow: {slide_type: fragment}
+#| echo: true
+# convert percentages to multiplicative change
+gdp_mult <- gdp_tidy |> drop_na() |> mutate(GDP_mult =  GDP/100 + 1)
+gdp_mult
+```
+
+## Maximum and Minimum Growth Years
+
+What is the maximum and minimum growth years for each country?
+
+```{r}
+gdp_mult |> 
+group_by(`Country Name`, `Country Code`) |>
+  summarize(max_growth = max(GDP_mult), 
+  min_growth = min(GDP_mult))
+```
+
+## Summarizing Geometric Means
+
+The Geometric mean of variables $x$ is $(\prod_i^n x_i)^{1/n}$
+
+How do we compute the geometric mean of the GDPs in each year, over all countries?
+
+```{r}
+geometric_mean <- \(x) prod(x)^(1/length(x))
+
+# compute geometric mean
+gdp_mult |> summarize(geometric_mean = geometric_mean(GDP_mult))
+```
+
+<center>Why the geometric mean give us?</center>
+
+## Geometric mean of growth multipliers
+The "compound annual growth rate" (CAGR) is the solution to
+
+$$ \prod_i^n (1 + r_i) = (1 + CAGR)^n$$ 
+
+where $r_i$ are actual rate increases over the n years. So,
+
+$$ CAGR = \text{geometric mean}\{1 + r_1, 1+r_2, ... , 1 + r_n \} - 1 $$
+
+## Computing annualized growth
+
+Now let's compute the annualized growth rate *by country*.
+
+We can do this *grouping by* country and computing the geometric mean of the GDP within each country.
+
+```{r}
+gdp_mult |> group_by(`Country Name`) |> 
+  summarize(annualized_growth_rate = geometric_mean(GDP_mult) - 1) |> 
+  arrange(desc(annualized_growth_rate)) |>
+  print(n=5)
+```
+
+Suppose we wanted to compute annualized growth by decade for each country. How could we do it?
+
+## Annualized growth by decade
+
+- Define a decade variable
+
+- Group by country and decade
+
+- Summarize
+
+```{r}
+## Define a decade variable
+gdp_w_decade <- gdp_mult |> 
+  mutate(date = ymd(paste0(Year, "01-01"))) |> 
+  mutate(decade = floor_date(date, unit=years(10)))
+
+gdp_w_decade
+
+gdp_w_decade |> filter(decade == "1960-01-01" & `Country Name` == "Argentina") |>
+  summarize(geometric_mean(GDP))
+
+```
+
+```{r}
+## group and aggregate
+gdp_decade <- gdp_w_decade |> group_by(`Country Name`, decade) |> 
+  summarize(annualized_growth_rate = geometric_mean(GDP_mult) - 1) |>
+  arrange(desc(annualized_growth_rate))
+
+gdp_decade
+```
+
+## Your turn
+
+*How do you find the country with the highest annualized GDP growth for each decade?*
+
+Write a line of code that would perform this calculation.
+
+. . . 
+
+```{r, echo=TRUE}
+gdp_decade |>  
+  group_by(decade) |> 
+  slice_max(annualized_growth_rate)
 ```
 
 ## Recap

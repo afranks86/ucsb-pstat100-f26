@@ -1174,7 +1174,7 @@ Is this a tidy dataset?
 </div>
 <div class="fragment">
 <center>
-See any problems?
+See any issues?
 </center>
 </div>
 </section>
@@ -1208,7 +1208,7 @@ See any problems?
 </div>
 <div class="fragment">
 <center>
-See any other problems?
+See any other issues?
 </center>
 </div>
 </section>
@@ -1730,12 +1730,17 @@ What was the data type returned by this code?
 <div class="cell">
 <div class="sourceCode cell-code" id="cb50"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb50-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">filter</span>(random_filter)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 3 × 10
-  country               total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65
-  &lt;chr&gt;                     &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;
-1 Canada                     37.4          81.5        2         24.9        6.6
-2 Luxembourg                  0.6          91.2        0          0.4        0.1
-3 Moldova (Republic of)       4            42.7        0.2        2.9        0.5
+<pre><code># A tibble: 8 × 10
+  country             total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65
+  &lt;chr&gt;                   &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;
+1 Antigua and Barbuda       0.1          24.5        0          0.1        0  
+2 Bulgaria                  7            75.3        0.3        4.5        1.5
+3 Kiribati                  0.1          54.8        0          0.1        0  
+4 Mongolia                  3.2          68.5        0.4        2.1        0.1
+5 Mozambique               30.4          36.5        5         16          0.9
+6 Papua New Guinea          8.8          13.2        1.1        5.4        0.3
+7 Serbia                    8.8          56.3        0.4        5.8        1.6
+8 Singapore                 5.8         100          0.2        4.4        0.7
 # ℹ 4 more variables: gender_inequality &lt;dbl&gt;, parliament_pct_women &lt;dbl&gt;,
 #   labor_participation_women &lt;dbl&gt;, labor_participation_men &lt;dbl&gt;</code></pre>
 </div>
@@ -1936,6 +1941,7 @@ What was the data type returned by this code?
 </section>
 <section id="naming-the-columns" class="slide level2">
 <h2>Naming the columns</h2>
+<p>To give the mutated variables new names (and keep the old ones) can use <code>.names</code></p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb65"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="fu">starts_with</span>(<span class="st">&quot;pop_&quot;</span>), \(x) x<span class="sc">/</span>total_pop, <span class="at">.names =</span> <span class="st">&quot;{.col}_pct&quot;</span>)) <span class="sc">|&gt;</span> </span>
 <span id="cb65-2"><a href></a>  <span class="fu">select</span>(country, total_pop, </span>
@@ -1951,6 +1957,31 @@ $ pop_over65     &lt;dbl&gt; 1.0, 0.4, 2.8, NA, 0.7, 0.0, 5.0, 0.3, 4.0, 1.7, 0.
 $ pop_under5_pct &lt;dbl&gt; 0.14736842, 0.06896552, 0.11600928, NA, 0.17924528, 0.0…
 $ pop_15to64_pct &lt;dbl&gt; 0.5500000, 0.6896552, 0.6287703, NA, 0.5125786, 1.00000…
 $ pop_over65_pct &lt;dbl&gt; 0.02631579, 0.13793103, 0.06496520, NA, 0.02201258, 0.0…</code></pre>
+</div>
+</div>
+</section>
+<section id="dataframe-aggregations" class="slide level2">
+<h2>Dataframe aggregations</h2>
+<p>Compute the population from 5 to 14:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb67"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href></a><span class="co"># sum `pop_under5`, `pop_15to64`, and `pop_over65`</span></span>
+<span id="cb67-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">pop_5to14 =</span> total_pop <span class="sc">-</span> pop_under5 <span class="sc">-</span> pop_15to64 <span class="sc">-</span> pop_over65) <span class="sc">|&gt;</span> </span>
+<span id="cb67-3"><a href></a>  <span class="fu">select</span>(country, <span class="fu">contains</span>(<span class="st">&quot;pop&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 189 × 7
+   country    total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65 pop_5to14
+   &lt;chr&gt;          &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
+ 1 Afghanist…      38            25.8        5.6       20.9        1      10.5  
+ 2 Albania          2.9          61.2        0.2        2          0.4     0.300
+ 3 Algeria         43.1          73.2        5         27.1        2.8     8.2  
+ 4 Andorra          0.1          88         NA         NA         NA      NA    
+ 5 Angola          31.8          66.2        5.7       16.3        0.7     9.1  
+ 6 Antigua a…       0.1          24.5        0          0.1        0       0    
+ 7 Argentina       44.8          92          3.7       28.7        5       7.40 
+ 8 Armenia          3            63.2        0.2        2          0.3     0.5  
+ 9 Australia       25.2          86.1        1.7       16.3        4       3.2  
+10 Austria          9            58.5        0.4        6          1.7     0.9  
+# ℹ 179 more rows</code></pre>
 </div>
 </div>
 </section>
@@ -1982,7 +2013,7 @@ $ pop_over65_pct &lt;dbl&gt; 0.02631579, 0.13793103, 0.06496520, NA, 0.02201258,
 <h2>Sorting and finding max and mins</h2>
 <p>How can we find the find observation associated with the country that had the largest percentage of women in parliament in the year the UN development data was collected?</p>
 <div class="cell" data-slideshow="{&quot;slide_type&quot;:&quot;fragment&quot;}">
-<div class="sourceCode cell-code" id="cb67"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">slice_max</span>(parliament_pct_women) <span class="sc">|&gt;</span> <span class="fu">glimpse</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb69"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb69-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">slice_max</span>(parliament_pct_women) <span class="sc">|&gt;</span> <span class="fu">glimpse</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Rows: 1
 Columns: 10
@@ -2000,8 +2031,8 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 </div>
 <div class="fragment">
 <div class="cell">
-<div class="sourceCode cell-code" id="cb69"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb69-1"><a href></a><span class="do">## same as</span></span>
-<span id="cb69-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">arrange</span>(<span class="fu">desc</span>(parliament_pct_women)) <span class="sc">|&gt;</span> <span class="fu">slice</span>(<span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb71"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href></a><span class="do">## same as</span></span>
+<span id="cb71-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">arrange</span>(<span class="fu">desc</span>(parliament_pct_women)) <span class="sc">|&gt;</span> <span class="fu">slice</span>(<span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 10
   country total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65
@@ -2013,12 +2044,28 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 </div>
 </div>
 </section>
-<section id="dataframe-aggregations" class="slide level2">
+<section id="dataframe-aggregations-1" class="slide level2">
+<h2>Dataframe aggregations</h2>
+<p>How do we find the mean percentage of women in parliament across all countries?</p>
+<p>How do we find the mean of total population across all countries?</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb73"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb73-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="at">mean_pct_women =</span> <span class="fu">mean</span>(parliament_pct_women, <span class="at">na.rm=</span><span class="cn">TRUE</span>), </span>
+<span id="cb73-2"><a href></a>                   <span class="at">max_total_pop =</span> <span class="fu">max</span>(total_pop))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 2
+  mean_pct_women max_total_pop
+           &lt;dbl&gt;         &lt;dbl&gt;
+1           23.1         1434.</code></pre>
+</div>
+</div>
+</section>
+<section id="dataframe-aggregations-2" class="slide level2">
 <h2>Dataframe aggregations</h2>
 <p>How do we find the mean of every column?</p>
+<p><code>across</code> makes it easy to apply the same transformation to multiple columns, allowing you to use select() helpers like <code>everything()</code> or <code>!country</code> to specify which columns to include.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb71"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href></a><span class="co"># mean of every column</span></span>
-<span id="cb71-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="fu">everything</span>(), mean))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb75"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb75-1"><a href></a><span class="co"># mean of every column? What is the problem?</span></span>
+<span id="cb75-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="fu">everything</span>(), mean))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 10
   country total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65
@@ -2028,29 +2075,10 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 #   labor_participation_women &lt;dbl&gt;, labor_participation_men &lt;dbl&gt;</code></pre>
 </div>
 </div>
-</section>
-<section id="dataframe-aggregations-1" class="slide level2">
-<h2>Dataframe aggregations</h2>
-<p>How do we find the mean of every column?</p>
+<div class="fragment">
 <div class="cell">
-<div class="sourceCode cell-code" id="cb73"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb73-1"><a href></a><span class="co"># mean of every column</span></span>
-<span id="cb73-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="sc">!</span>country, mean))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 1 × 9
-  total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65 gender_inequality
-      &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;             &lt;dbl&gt;
-1      40.4          58.7         NA         NA         NA                NA
-# ℹ 3 more variables: parliament_pct_women &lt;dbl&gt;,
-#   labor_participation_women &lt;dbl&gt;, labor_participation_men &lt;dbl&gt;</code></pre>
-</div>
-</div>
-</section>
-<section id="dataframe-aggregations-2" class="slide level2">
-<h2>Dataframe aggregations</h2>
-<p>How do we find the mean of every column?</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb75"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb75-1"><a href></a><span class="co"># mean of every column</span></span>
-<span id="cb75-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="sc">!</span>country, mean, <span class="at">na.rm=</span><span class="cn">TRUE</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb77"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb77-1"><a href></a><span class="co"># mean of every column except country, ignoring NA&#39;s </span></span>
+<span id="cb77-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="sc">!</span>country, \(x) <span class="fu">mean</span>(x, <span class="at">na.rm=</span><span class="cn">TRUE</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 9
   total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65 gender_inequality
@@ -2059,276 +2087,48 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 # ℹ 3 more variables: parliament_pct_women &lt;dbl&gt;,
 #   labor_participation_women &lt;dbl&gt;, labor_participation_men &lt;dbl&gt;</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb77"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb77-1"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="at">mean_pct_women =</span> <span class="fu">mean</span>(parliament_pct_women, <span class="at">na.rm=</span><span class="cn">TRUE</span>), </span>
-<span id="cb77-2"><a href></a>                   <span class="at">max_total_pop =</span> <span class="fu">max</span>(total_pop))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 1 × 2
-  mean_pct_women max_total_pop
-           &lt;dbl&gt;         &lt;dbl&gt;
-1           23.1         1434.</code></pre>
 </div>
 </div>
 </section>
-<section id="dataframe-aggregations-3" class="slide level2">
-<h2>Dataframe aggregations</h2>
-<p>What about the mean of each row? Do we ever want to do this?</p>
-<div class="fragment">
-<p>Compute the population from 5 to 14:</p>
+<section id="summarizing-by-group" class="slide level2">
+<h2>Summarizing by Group</h2>
+<p>How do we find the number of songs that each artist had in the top 100?</p>
+<p>We can do it for one artist by filtering first, for example:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb79"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb79-1"><a href></a><span class="co"># sum `pop_under5`, `pop_15to64`, and `pop_over65`</span></span>
-<span id="cb79-2"><a href></a>undev <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">pop_5to14 =</span> total_pop <span class="sc">-</span> pop_under5 <span class="sc">-</span> pop_15to64 <span class="sc">-</span> pop_over65) <span class="sc">|&gt;</span> </span>
-<span id="cb79-3"><a href></a>  <span class="fu">select</span>(country, <span class="fu">contains</span>(<span class="st">&quot;pop&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 189 × 7
-   country    total_pop urban_pct_pop pop_under5 pop_15to64 pop_over65 pop_5to14
-   &lt;chr&gt;          &lt;dbl&gt;         &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;      &lt;dbl&gt;     &lt;dbl&gt;
- 1 Afghanist…      38            25.8        5.6       20.9        1      10.5  
- 2 Albania          2.9          61.2        0.2        2          0.4     0.300
- 3 Algeria         43.1          73.2        5         27.1        2.8     8.2  
- 4 Andorra          0.1          88         NA         NA         NA      NA    
- 5 Angola          31.8          66.2        5.7       16.3        0.7     9.1  
- 6 Antigua a…       0.1          24.5        0          0.1        0       0    
- 7 Argentina       44.8          92          3.7       28.7        5       7.40 
- 8 Armenia          3            63.2        0.2        2          0.3     0.5  
- 9 Australia       25.2          86.1        1.7       16.3        4       3.2  
-10 Austria          9            58.5        0.4        6          1.7     0.9  
-# ℹ 179 more rows</code></pre>
-</div>
-</div>
-</div>
-</section>
-<section id="summarizing" class="slide level2">
-<h2>Summarizing</h2>
-<p>Consider the GDP data</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb81"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb81-1"><a href></a><span class="co"># read in gdp data</span></span>
-<span id="cb81-2"><a href></a>gdp <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&#39;data/annual_growth.csv&#39;</span>)</span>
-<span id="cb81-3"><a href></a>gdp</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 264 × 61
-   `Country Name`       `Country Code` `1961` `1962` `1963` `1964` `1965` `1966`
-   &lt;chr&gt;                &lt;chr&gt;           &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
- 1 Aruba                ABW             NA    NA      NA      NA     NA   NA    
- 2 Afghanistan          AFG             NA    NA      NA      NA     NA   NA    
- 3 Angola               AGO             NA    NA      NA      NA     NA   NA    
- 4 Albania              ALB             NA    NA      NA      NA     NA   NA    
- 5 Andorra              AND             NA    NA      NA      NA     NA   NA    
- 6 Arab World           ARB             NA    NA      NA      NA     NA   NA    
- 7 United Arab Emirates ARE             NA    NA      NA      NA     NA   NA    
- 8 Argentina            ARG              5.43 -0.852  -5.31   10.1   10.6 -0.660
- 9 Armenia              ARM             NA    NA      NA      NA     NA   NA    
-10 American Samoa       ASM             NA    NA      NA      NA     NA   NA    
-# ℹ 254 more rows
-# ℹ 53 more variables: `1967` &lt;dbl&gt;, `1968` &lt;dbl&gt;, `1969` &lt;dbl&gt;, `1970` &lt;dbl&gt;,
-#   `1971` &lt;dbl&gt;, `1972` &lt;dbl&gt;, `1973` &lt;dbl&gt;, `1974` &lt;dbl&gt;, `1975` &lt;dbl&gt;,
-#   `1976` &lt;dbl&gt;, `1977` &lt;dbl&gt;, `1978` &lt;dbl&gt;, `1979` &lt;dbl&gt;, `1980` &lt;dbl&gt;,
-#   `1981` &lt;dbl&gt;, `1982` &lt;dbl&gt;, `1983` &lt;dbl&gt;, `1984` &lt;dbl&gt;, `1985` &lt;dbl&gt;,
-#   `1986` &lt;dbl&gt;, `1987` &lt;dbl&gt;, `1988` &lt;dbl&gt;, `1989` &lt;dbl&gt;, `1990` &lt;dbl&gt;,
-#   `1991` &lt;dbl&gt;, `1992` &lt;dbl&gt;, `1993` &lt;dbl&gt;, `1994` &lt;dbl&gt;, `1995` &lt;dbl&gt;, …</code></pre>
-</div>
-</div>
-<div class="fragment">
-<p>First, we’ll conver the GDP data to proportions</p>
-<div class="cell" data-slideshow="{&quot;slide_type&quot;:&quot;fragment&quot;}">
-<div class="sourceCode cell-code" id="cb83"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb83-1"><a href></a><span class="co"># convert percentages to multiplicative change</span></span>
-<span id="cb83-2"><a href></a>gdp_prop <span class="ot">&lt;-</span> gdp <span class="sc">|&gt;</span> <span class="fu">drop_na</span>() <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="st">`</span><span class="at">1961</span><span class="st">`</span><span class="sc">:</span><span class="st">`</span><span class="at">2019</span><span class="st">`</span>, \(x) x<span class="sc">/</span><span class="dv">100</span> <span class="sc">+</span> <span class="dv">1</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-</div>
-</section>
-<section id="summarizing-1" class="slide level2">
-<h2>Summarizing</h2>
-<p>How do we compute the geometric mean of the GDPs in each year, over countries?</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb84"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb84-1"><a href></a><span class="co"># compute geometric mean</span></span>
-<span id="cb84-2"><a href></a>gdp_prop <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="fu">across</span>(<span class="st">`</span><span class="at">1961</span><span class="st">`</span><span class="sc">:</span><span class="st">`</span><span class="at">2019</span><span class="st">`</span>, \(x) <span class="fu">prod</span>(x)<span class="sc">^</span>(<span class="dv">1</span><span class="sc">/</span><span class="fu">length</span>(x))))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 1 × 59
-  `1961` `1962` `1963` `1964` `1965` `1966` `1967` `1968` `1969` `1970` `1971`
-   &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
-1   1.03   1.05   1.05   1.06   1.05   1.05   1.04   1.05   1.07   1.07   1.05
-# ℹ 48 more variables: `1972` &lt;dbl&gt;, `1973` &lt;dbl&gt;, `1974` &lt;dbl&gt;, `1975` &lt;dbl&gt;,
-#   `1976` &lt;dbl&gt;, `1977` &lt;dbl&gt;, `1978` &lt;dbl&gt;, `1979` &lt;dbl&gt;, `1980` &lt;dbl&gt;,
-#   `1981` &lt;dbl&gt;, `1982` &lt;dbl&gt;, `1983` &lt;dbl&gt;, `1984` &lt;dbl&gt;, `1985` &lt;dbl&gt;,
-#   `1986` &lt;dbl&gt;, `1987` &lt;dbl&gt;, `1988` &lt;dbl&gt;, `1989` &lt;dbl&gt;, `1990` &lt;dbl&gt;,
-#   `1991` &lt;dbl&gt;, `1992` &lt;dbl&gt;, `1993` &lt;dbl&gt;, `1994` &lt;dbl&gt;, `1995` &lt;dbl&gt;,
-#   `1996` &lt;dbl&gt;, `1997` &lt;dbl&gt;, `1998` &lt;dbl&gt;, `1999` &lt;dbl&gt;, `2000` &lt;dbl&gt;,
-#   `2001` &lt;dbl&gt;, `2002` &lt;dbl&gt;, `2003` &lt;dbl&gt;, `2004` &lt;dbl&gt;, `2005` &lt;dbl&gt;, …</code></pre>
-</div>
-</div>
-<p>What does the geometric mean give us?</p>
-</section>
-<section id="grouped-aggregations" class="slide level2">
-<h2>Grouped aggregations</h2>
-<p>How do compute the <em>country</em> with the highest annualized GDP growth for the period 1961-2019?</p>
-<p>First we should pivot to create tidy data:</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb86"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb86-1"><a href></a>gdp_tidy <span class="ot">&lt;-</span> gdp_prop <span class="sc">|&gt;</span> </span>
-<span id="cb86-2"><a href></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="sc">-</span><span class="fu">c</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>), <span class="at">names_to=</span><span class="st">&quot;Year&quot;</span>, <span class="at">values_to=</span><span class="st">&quot;gdp_prop&quot;</span>)</span>
-<span id="cb86-3"><a href></a></span>
-<span id="cb86-4"><a href></a>gdp_tidy</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 7,021 × 4
-   `Country Name` `Country Code` Year  gdp_prop
-   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt;    &lt;dbl&gt;
- 1 Argentina      ARG            1961     1.05 
- 2 Argentina      ARG            1962     0.991
- 3 Argentina      ARG            1963     0.947
- 4 Argentina      ARG            1964     1.10 
- 5 Argentina      ARG            1965     1.11 
- 6 Argentina      ARG            1966     0.993
- 7 Argentina      ARG            1967     1.03 
- 8 Argentina      ARG            1968     1.05 
- 9 Argentina      ARG            1969     1.10 
-10 Argentina      ARG            1970     1.03 
-# ℹ 7,011 more rows</code></pre>
-</div>
-</div>
-</section>
-<section id="computing-annualized-growth" class="slide level2">
-<h2>Computing annualized growth</h2>
-<p>We can do this <em>grouping by</em> country and computing the geometric mean of the GDP within each country.</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb88"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb88-1"><a href></a>geometric_mean <span class="ot">&lt;-</span> \(x) <span class="fu">prod</span>(x, <span class="at">na.rm=</span><span class="cn">TRUE</span>)<span class="sc">^</span>{<span class="dv">1</span><span class="sc">/</span><span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(x))}</span>
-<span id="cb88-2"><a href></a></span>
-<span id="cb88-3"><a href></a>gdp_tidy <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>, <span class="st">`</span><span class="at">Country Code</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
-<span id="cb88-4"><a href></a>  <span class="fu">summarize</span>(<span class="at">max_growth =</span> <span class="fu">max</span>(gdp_prop), <span class="at">min_growth =</span> <span class="fu">min</span>(gdp_prop)) <span class="sc">|&gt;</span></span>
-<span id="cb88-5"><a href></a>  <span class="fu">ungroup</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 119 × 4
-   `Country Name` `Country Code` max_growth min_growth
-   &lt;chr&gt;          &lt;chr&gt;               &lt;dbl&gt;      &lt;dbl&gt;
- 1 Algeria        DZA                  1.34      0.803
- 2 Argentina      ARG                  1.11      0.891
- 3 Australia      AUS                  1.07      0.978
- 4 Austria        AUT                  1.06      0.962
- 5 Bahamas, The   BHS                  1.26      0.832
- 6 Bangladesh     BGD                  1.11      0.860
- 7 Belgium        BEL                  1.07      0.980
- 8 Belize         BLZ                  1.14      0.979
- 9 Benin          BEN                  1.10      0.951
-10 Bermuda        BMU                  1.14      0.944
-# ℹ 109 more rows</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb90"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb90-1"><a href></a>gdp_tidy <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">new_col =</span> <span class="fu">log</span>(gdp_prop))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 7,021 × 5
-   `Country Name` `Country Code` Year  gdp_prop  new_col
-   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt;    &lt;dbl&gt;    &lt;dbl&gt;
- 1 Argentina      ARG            1961     1.05   0.0529 
- 2 Argentina      ARG            1962     0.991 -0.00856
- 3 Argentina      ARG            1963     0.947 -0.0545 
- 4 Argentina      ARG            1964     1.10   0.0965 
- 5 Argentina      ARG            1965     1.11   0.100  
- 6 Argentina      ARG            1966     0.993 -0.00662
- 7 Argentina      ARG            1967     1.03   0.0314 
- 8 Argentina      ARG            1968     1.05   0.0471 
- 9 Argentina      ARG            1969     1.10   0.0924 
-10 Argentina      ARG            1970     1.03   0.0300 
-# ℹ 7,011 more rows</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb92"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb92-1"><a href></a>gdp_tidy <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb92-2"><a href></a>  <span class="fu">summarize</span>(<span class="at">annualized_growth_rate =</span> <span class="fu">geometric_mean</span>(gdp_prop) <span class="sc">-</span><span class="dv">1</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb92-3"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(annualized_growth_rate)) <span class="sc">|&gt;</span></span>
-<span id="cb92-4"><a href></a>  <span class="fu">print</span>(<span class="at">n=</span><span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 119 × 2
-  `Country Name`                             annualized_growth_rate
-  &lt;chr&gt;                                                       &lt;dbl&gt;
-1 Botswana                                                   0.0794
-2 China                                                      0.0792
-3 Korea, Rep.                                                0.0729
-4 Singapore                                                  0.0713
-5 East Asia &amp; Pacific (IDA &amp; IBRD countries)                 0.0704
-# ℹ 114 more rows</code></pre>
-</div>
-</div>
-<p>Suppose we wanted to compute annualized growth by decade for each country. How could we do it?</p>
-</section>
-<section id="annualized-growth-by-decade" class="slide level2">
-<h2>Annualized growth by decade</h2>
-<ul>
-<li><p>Define a decade variable</p></li>
-<li><p>Group by country and decade</p></li>
-<li><p>Summarize</p></li>
-</ul>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb94"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb94-1"><a href></a><span class="do">## Define a decade variable</span></span>
-<span id="cb94-2"><a href></a>gdp_w_decade <span class="ot">&lt;-</span> gdp_tidy <span class="sc">|&gt;</span> </span>
-<span id="cb94-3"><a href></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(<span class="fu">paste0</span>(Year, <span class="st">&quot;01-01&quot;</span>))) <span class="sc">|&gt;</span> </span>
-<span id="cb94-4"><a href></a>  <span class="fu">mutate</span>(<span class="at">decade =</span> <span class="fu">floor_date</span>(date, <span class="at">unit=</span><span class="fu">years</span>(<span class="dv">10</span>)))</span>
-<span id="cb94-5"><a href></a></span>
-<span id="cb94-6"><a href></a>gdp_w_decade</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 7,021 × 6
-   `Country Name` `Country Code` Year  gdp_prop date       decade    
-   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt;    &lt;dbl&gt; &lt;date&gt;     &lt;date&gt;    
- 1 Argentina      ARG            1961     1.05  1961-01-01 1960-01-01
- 2 Argentina      ARG            1962     0.991 1962-01-01 1960-01-01
- 3 Argentina      ARG            1963     0.947 1963-01-01 1960-01-01
- 4 Argentina      ARG            1964     1.10  1964-01-01 1960-01-01
- 5 Argentina      ARG            1965     1.11  1965-01-01 1960-01-01
- 6 Argentina      ARG            1966     0.993 1966-01-01 1960-01-01
- 7 Argentina      ARG            1967     1.03  1967-01-01 1960-01-01
- 8 Argentina      ARG            1968     1.05  1968-01-01 1960-01-01
- 9 Argentina      ARG            1969     1.10  1969-01-01 1960-01-01
-10 Argentina      ARG            1970     1.03  1970-01-01 1970-01-01
-# ℹ 7,011 more rows</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb96"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb96-1"><a href></a>gdp_w_decade <span class="sc">|&gt;</span> <span class="fu">filter</span>(decade <span class="sc">==</span> <span class="st">&quot;1960-01-01&quot;</span> <span class="sc">&amp;</span> <span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">==</span> <span class="st">&quot;Argentina&quot;</span>) <span class="sc">|&gt;</span></span>
-<span id="cb96-2"><a href></a>  <span class="fu">summarize</span>(<span class="fu">geometric_mean</span>(gdp_prop))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb79"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb79-1"><a href></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb79-2"><a href></a>  <span class="fu">filter</span>(artist <span class="sc">==</span> <span class="st">&quot;Eminem&quot;</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb79-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">n_songs =</span> <span class="fu">length</span>(<span class="fu">unique</span>(track)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 1
-  `geometric_mean(gdp_prop)`
-                       &lt;dbl&gt;
-1                       1.04</code></pre>
+  n_songs
+    &lt;int&gt;
+1       3</code></pre>
 </div>
 </div>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb98"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb98-1"><a href></a><span class="do">## group and aggregate</span></span>
-<span id="cb98-2"><a href></a>gdp_decade <span class="ot">&lt;-</span> gdp_w_decade <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>, decade) <span class="sc">|&gt;</span> </span>
-<span id="cb98-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">annualized_growth_rate =</span> <span class="fu">geometric_mean</span>(gdp_prop) <span class="sc">-</span> <span class="dv">1</span>) </span>
-<span id="cb98-4"><a href></a></span>
-<span id="cb98-5"><a href></a>gdp_decade</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 714 × 3
-# Groups:   Country Name [119]
-   `Country Name` decade     annualized_growth_rate
-   &lt;chr&gt;          &lt;date&gt;                      &lt;dbl&gt;
- 1 Algeria        1960-01-01                0.0306 
- 2 Algeria        1970-01-01                0.0680 
- 3 Algeria        1980-01-01                0.0277 
- 4 Algeria        1990-01-01                0.0154 
- 5 Algeria        2000-01-01                0.0387 
- 6 Algeria        2010-01-01                0.0266 
- 7 Argentina      1960-01-01                0.0398 
- 8 Argentina      1970-01-01                0.0284 
- 9 Argentina      1980-01-01               -0.00395
-10 Argentina      1990-01-01                0.0388 
-# ℹ 704 more rows</code></pre>
-</div>
-</div>
+<p>How can we automate this for all artists?</p>
 </section>
-<section id="your-turn-2" class="slide level2">
-<h2>Your turn</h2>
-<p><em>How do you find the country with the highest annualized GDP growth for each decade?</em></p>
-<p>Write a line of code that would perform this calculation.</p>
-<div class="fragment">
+<section id="summarizing-by-group-1" class="slide level2">
+<h2>Summarizing by Group</h2>
+<p>We can summarize within groups by grouping the data first using <code>group_by()</code>.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb100"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb100-1"><a href></a>gdp_decade <span class="sc">|&gt;</span>  </span>
-<span id="cb100-2"><a href></a>  <span class="fu">group_by</span>(decade) <span class="sc">|&gt;</span> </span>
-<span id="cb100-3"><a href></a>  <span class="fu">slice_max</span>(annualized_growth_rate)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb81"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb81-1"><a href></a>billboard_long <span class="sc">|&gt;</span> <span class="fu">group_by</span>(artist) <span class="sc">|&gt;</span> </span>
+<span id="cb81-2"><a href></a>  <span class="fu">summarize</span>(<span class="at">n_songs =</span> <span class="fu">length</span>(<span class="fu">unique</span>(track))) <span class="sc">|&gt;</span></span>
+<span id="cb81-3"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(n_songs))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 6 × 3
-# Groups:   decade [6]
-  `Country Name`     decade     annualized_growth_rate
-  &lt;chr&gt;              &lt;date&gt;                      &lt;dbl&gt;
-1 Iran, Islamic Rep. 1960-01-01                 0.119 
-2 Botswana           1970-01-01                 0.155 
-3 Botswana           1980-01-01                 0.114 
-4 China              1990-01-01                 0.0995
-5 Myanmar            2000-01-01                 0.124 
-6 China              2010-01-01                 0.0767</code></pre>
-</div>
+<pre><code># A tibble: 228 × 2
+   artist               n_songs
+   &lt;chr&gt;                  &lt;int&gt;
+ 1 Jay-Z                      5
+ 2 Dixie Chicks, The          4
+ 3 Houston, Whitney           4
+ 4 Aguilera, Christina        3
+ 5 Backstreet Boys, The       3
+ 6 Braxton, Toni              3
+ 7 DMX                        3
+ 8 Destiny&#39;s Child            3
+ 9 Eminem                     3
+10 Jackson, Alan              3
+# ℹ 218 more rows</code></pre>
 </div>
 </div>
 </section>
@@ -2336,10 +2136,10 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 <h2>Finding the highest ranking songs</h2>
 <p>In the Billboard data, what’s the highest ranking song for each artist?</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb102"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb102-1"><a href></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb102-2"><a href></a>  <span class="fu">group_by</span>(artist) <span class="sc">|&gt;</span> </span>
-<span id="cb102-3"><a href></a>  <span class="fu">slice_min</span>(rank, <span class="at">with_ties=</span><span class="cn">FALSE</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb102-4"><a href></a>  <span class="fu">arrange</span>(rank)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb83"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb83-1"><a href></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb83-2"><a href></a>  <span class="fu">group_by</span>(artist) <span class="sc">|&gt;</span> </span>
+<span id="cb83-3"><a href></a>  <span class="fu">slice_min</span>(rank, <span class="at">with_ties=</span><span class="cn">FALSE</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb83-4"><a href></a>  <span class="fu">arrange</span>(rank)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 228 × 5
 # Groups:   artist [228]
@@ -2363,11 +2163,11 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
 <h2>Weeks at the top</h2>
 <p>How many weeks was each track at no. 1? In the top 10?</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb104"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb104-1"><a href></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb104-2"><a href></a>  <span class="fu">group_by</span>(artist, track) <span class="sc">|&gt;</span> </span>
-<span id="cb104-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">weeks_at_number_one =</span> <span class="fu">sum</span>(rank <span class="sc">==</span> <span class="dv">1</span>, <span class="at">na.rm=</span><span class="cn">TRUE</span>), </span>
-<span id="cb104-4"><a href></a>            <span class="at">weeks_in_top_ten =</span> <span class="fu">sum</span>(rank <span class="sc">&lt;=</span> <span class="dv">10</span>, <span class="at">na.rm=</span><span class="cn">TRUE</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb104-5"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(weeks_at_number_one))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb85"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb85-1"><a href></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb85-2"><a href></a>  <span class="fu">group_by</span>(artist, track) <span class="sc">|&gt;</span> </span>
+<span id="cb85-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">weeks_at_number_one =</span> <span class="fu">sum</span>(rank <span class="sc">==</span> <span class="dv">1</span>, <span class="at">na.rm=</span><span class="cn">TRUE</span>), </span>
+<span id="cb85-4"><a href></a>            <span class="at">weeks_in_top_ten =</span> <span class="fu">sum</span>(rank <span class="sc">&lt;=</span> <span class="dv">10</span>, <span class="at">na.rm=</span><span class="cn">TRUE</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb85-5"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(weeks_at_number_one))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 317 × 4
 # Groups:   artist [228]
@@ -2384,6 +2184,227 @@ $ labor_participation_men   &lt;dbl&gt; 83.4</code></pre>
  9 Aguilera, Christina What A Girl Wants                      2                7
 10 Lonestar            Amazed                                 2               12
 # ℹ 307 more rows</code></pre>
+</div>
+</div>
+</section>
+<section id="summarizing-gdp-data" class="slide level2">
+<h2>Summarizing GDP data</h2>
+<p>Consider the GDP data. How can we compute the “mean annualized GDP”?</p>
+<p>First let’s tidy it.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb87"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb87-1"><a href></a><span class="co"># read in gdp data</span></span>
+<span id="cb87-2"><a href></a>gdp <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&#39;data/annual_growth.csv&#39;</span>)</span>
+<span id="cb87-3"><a href></a></span>
+<span id="cb87-4"><a href></a>gdp_tidy <span class="ot">&lt;-</span> gdp <span class="sc">|&gt;</span> </span>
+<span id="cb87-5"><a href></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="st">`</span><span class="at">1961</span><span class="st">`</span><span class="sc">:</span><span class="st">`</span><span class="at">2019</span><span class="st">`</span>, <span class="at">names_to=</span><span class="st">&quot;Year&quot;</span>, <span class="at">values_to=</span><span class="st">&quot;GDP&quot;</span>)</span>
+<span id="cb87-6"><a href></a></span>
+<span id="cb87-7"><a href></a>gdp_tidy</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 15,576 × 4
+   `Country Name` `Country Code` Year    GDP
+   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt; &lt;dbl&gt;
+ 1 Aruba          ABW            1961     NA
+ 2 Aruba          ABW            1962     NA
+ 3 Aruba          ABW            1963     NA
+ 4 Aruba          ABW            1964     NA
+ 5 Aruba          ABW            1965     NA
+ 6 Aruba          ABW            1966     NA
+ 7 Aruba          ABW            1967     NA
+ 8 Aruba          ABW            1968     NA
+ 9 Aruba          ABW            1969     NA
+10 Aruba          ABW            1970     NA
+# ℹ 15,566 more rows</code></pre>
+</div>
+</div>
+</section>
+<section id="summarizing-gdp-data-1" class="slide level2">
+<h2>Summarizing GDP data</h2>
+<p>Next let’s convert the GDP data to growth multipliers (e.g. 5% growth is a multiplier of 1.05)</p>
+<div class="cell" data-slideshow="{&quot;slide_type&quot;:&quot;fragment&quot;}">
+<div class="sourceCode cell-code" id="cb89"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb89-1"><a href></a><span class="co"># convert percentages to multiplicative change</span></span>
+<span id="cb89-2"><a href></a>gdp_mult <span class="ot">&lt;-</span> gdp_tidy <span class="sc">|&gt;</span> <span class="fu">drop_na</span>() <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">GDP_mult =</span>  GDP<span class="sc">/</span><span class="dv">100</span> <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb89-3"><a href></a>gdp_mult</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 11,923 × 5
+   `Country Name` `Country Code` Year    GDP GDP_mult
+   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt; &lt;dbl&gt;    &lt;dbl&gt;
+ 1 Aruba          ABW            1987  16.1      1.16
+ 2 Aruba          ABW            1988  18.6      1.19
+ 3 Aruba          ABW            1989  12.1      1.12
+ 4 Aruba          ABW            1990   3.96     1.04
+ 5 Aruba          ABW            1991   7.96     1.08
+ 6 Aruba          ABW            1992   5.88     1.06
+ 7 Aruba          ABW            1993   7.31     1.07
+ 8 Aruba          ABW            1994   8.20     1.08
+ 9 Aruba          ABW            1995   2.55     1.03
+10 Aruba          ABW            1996   1.19     1.01
+# ℹ 11,913 more rows</code></pre>
+</div>
+</div>
+</section>
+<section id="maximum-and-minimum-growth-years" class="slide level2">
+<h2>Maximum and Minimum Growth Years</h2>
+<p>What is the maximum and minimum growth years for each country?</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb91"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb91-1"><a href></a>gdp_mult <span class="sc">|&gt;</span> </span>
+<span id="cb91-2"><a href></a><span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>, <span class="st">`</span><span class="at">Country Code</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
+<span id="cb91-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">max_growth =</span> <span class="fu">max</span>(GDP_mult), </span>
+<span id="cb91-4"><a href></a>  <span class="at">min_growth =</span> <span class="fu">min</span>(GDP_mult))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 258 × 4
+# Groups:   Country Name [258]
+   `Country Name`      `Country Code` max_growth min_growth
+   &lt;chr&gt;               &lt;chr&gt;               &lt;dbl&gt;      &lt;dbl&gt;
+ 1 Afghanistan         AFG                  1.21      1.00 
+ 2 Albania             ALB                  1.13      0.720
+ 3 Algeria             DZA                  1.34      0.803
+ 4 American Samoa      ASM                  1.02      0.941
+ 5 Andorra             AND                  1.09      0.944
+ 6 Angola              AGO                  1.15      0.760
+ 7 Antigua and Barbuda ATG                  1.13      0.880
+ 8 Arab World          ARB                  1.16      0.909
+ 9 Argentina           ARG                  1.11      0.891
+10 Armenia             ARM                  1.14      0.582
+# ℹ 248 more rows</code></pre>
+</div>
+</div>
+</section>
+<section id="summarizing-geometric-means" class="slide level2">
+<h2>Summarizing Geometric Means</h2>
+<p>The Geometric mean of variables <span class="math inline">\(x\)</span> is <span class="math inline">\((\prod_i^n x_i)^{1/n}\)</span></p>
+<p>How do we compute the geometric mean of the GDPs in each year, over all countries?</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb93"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb93-1"><a href></a>geometric_mean <span class="ot">&lt;-</span> \(x) <span class="fu">prod</span>(x)<span class="sc">^</span>(<span class="dv">1</span><span class="sc">/</span><span class="fu">length</span>(x))</span>
+<span id="cb93-2"><a href></a></span>
+<span id="cb93-3"><a href></a><span class="co"># compute geometric mean</span></span>
+<span id="cb93-4"><a href></a>gdp_mult <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="at">geometric_mean =</span> <span class="fu">geometric_mean</span>(GDP_mult))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 1
+  geometric_mean
+           &lt;dbl&gt;
+1           1.04</code></pre>
+</div>
+</div>
+<center>
+Why the geometric mean give us?
+</center>
+</section>
+<section id="geometric-mean-of-growth-multipliers" class="slide level2">
+<h2>Geometric mean of growth multipliers</h2>
+<p>The “compound annual growth rate” (CAGR) is the solution to</p>
+<p><span class="math display">\[ \prod_i^n (1 + r_i) = (1 + CAGR)^n\]</span></p>
+<p>where <span class="math inline">\(r_i\)</span> are actual rate increases over the n years. So,</p>
+<p><span class="math display">\[ CAGR = \text{geometric mean}\{1 + r_1, 1+r_2, ... , 1 + r_n \} - 1 \]</span></p>
+</section>
+<section id="computing-annualized-growth" class="slide level2">
+<h2>Computing annualized growth</h2>
+<p>Now let’s compute the annualized growth rate <em>by country</em>.</p>
+<p>We can do this <em>grouping by</em> country and computing the geometric mean of the GDP within each country.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb95"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb95-1"><a href></a>gdp_mult <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb95-2"><a href></a>  <span class="fu">summarize</span>(<span class="at">annualized_growth_rate =</span> <span class="fu">geometric_mean</span>(GDP_mult) <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">|&gt;</span> </span>
+<span id="cb95-3"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(annualized_growth_rate)) <span class="sc">|&gt;</span></span>
+<span id="cb95-4"><a href></a>  <span class="fu">print</span>(<span class="at">n=</span><span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 258 × 2
+  `Country Name`         annualized_growth_rate
+  &lt;chr&gt;                                   &lt;dbl&gt;
+1 Equatorial Guinea                      0.117 
+2 Qatar                                  0.0881
+3 Bosnia and Herzegovina                 0.0842
+4 Botswana                               0.0794
+5 China                                  0.0792
+# ℹ 253 more rows</code></pre>
+</div>
+</div>
+<p>Suppose we wanted to compute annualized growth by decade for each country. How could we do it?</p>
+</section>
+<section id="annualized-growth-by-decade" class="slide level2">
+<h2>Annualized growth by decade</h2>
+<ul>
+<li><p>Define a decade variable</p></li>
+<li><p>Group by country and decade</p></li>
+<li><p>Summarize</p></li>
+</ul>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb97"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb97-1"><a href></a><span class="do">## Define a decade variable</span></span>
+<span id="cb97-2"><a href></a>gdp_w_decade <span class="ot">&lt;-</span> gdp_mult <span class="sc">|&gt;</span> </span>
+<span id="cb97-3"><a href></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(<span class="fu">paste0</span>(Year, <span class="st">&quot;01-01&quot;</span>))) <span class="sc">|&gt;</span> </span>
+<span id="cb97-4"><a href></a>  <span class="fu">mutate</span>(<span class="at">decade =</span> <span class="fu">floor_date</span>(date, <span class="at">unit=</span><span class="fu">years</span>(<span class="dv">10</span>)))</span>
+<span id="cb97-5"><a href></a></span>
+<span id="cb97-6"><a href></a>gdp_w_decade</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 11,923 × 7
+   `Country Name` `Country Code` Year    GDP GDP_mult date       decade    
+   &lt;chr&gt;          &lt;chr&gt;          &lt;chr&gt; &lt;dbl&gt;    &lt;dbl&gt; &lt;date&gt;     &lt;date&gt;    
+ 1 Aruba          ABW            1987  16.1      1.16 1987-01-01 1980-01-01
+ 2 Aruba          ABW            1988  18.6      1.19 1988-01-01 1980-01-01
+ 3 Aruba          ABW            1989  12.1      1.12 1989-01-01 1980-01-01
+ 4 Aruba          ABW            1990   3.96     1.04 1990-01-01 1990-01-01
+ 5 Aruba          ABW            1991   7.96     1.08 1991-01-01 1990-01-01
+ 6 Aruba          ABW            1992   5.88     1.06 1992-01-01 1990-01-01
+ 7 Aruba          ABW            1993   7.31     1.07 1993-01-01 1990-01-01
+ 8 Aruba          ABW            1994   8.20     1.08 1994-01-01 1990-01-01
+ 9 Aruba          ABW            1995   2.55     1.03 1995-01-01 1990-01-01
+10 Aruba          ABW            1996   1.19     1.01 1996-01-01 1990-01-01
+# ℹ 11,913 more rows</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb99"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb99-1"><a href></a>gdp_w_decade <span class="sc">|&gt;</span> <span class="fu">filter</span>(decade <span class="sc">==</span> <span class="st">&quot;1960-01-01&quot;</span> <span class="sc">&amp;</span> <span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">==</span> <span class="st">&quot;Argentina&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb99-2"><a href></a>  <span class="fu">summarize</span>(<span class="fu">geometric_mean</span>(GDP))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 1
+  `geometric_mean(GDP)`
+                  &lt;dbl&gt;
+1                   NaN</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb101"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb101-1"><a href></a><span class="do">## group and aggregate</span></span>
+<span id="cb101-2"><a href></a>gdp_decade <span class="ot">&lt;-</span> gdp_w_decade <span class="sc">|&gt;</span> <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>, decade) <span class="sc">|&gt;</span> </span>
+<span id="cb101-3"><a href></a>  <span class="fu">summarize</span>(<span class="at">annualized_growth_rate =</span> <span class="fu">geometric_mean</span>(GDP_mult) <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
+<span id="cb101-4"><a href></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(annualized_growth_rate))</span>
+<span id="cb101-5"><a href></a></span>
+<span id="cb101-6"><a href></a>gdp_decade</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1,262 × 3
+# Groups:   Country Name [258]
+   `Country Name`         decade     annualized_growth_rate
+   &lt;chr&gt;                  &lt;date&gt;                      &lt;dbl&gt;
+ 1 Oman                   1960-01-01                  0.414
+ 2 Bosnia and Herzegovina 1990-01-01                  0.312
+ 3 Equatorial Guinea      1990-01-01                  0.292
+ 4 Equatorial Guinea      2000-01-01                  0.202
+ 5 Aruba                  1980-01-01                  0.156
+ 6 Botswana               1970-01-01                  0.155
+ 7 Azerbaijan             2000-01-01                  0.154
+ 8 Saudi Arabia           1970-01-01                  0.153
+ 9 Jordan                 1970-01-01                  0.145
+10 United Arab Emirates   1970-01-01                  0.139
+# ℹ 1,252 more rows</code></pre>
+</div>
+</div>
+</section>
+<section id="your-turn-2" class="slide level2">
+<h2>Your turn</h2>
+<p><em>How do you find the country with the highest annualized GDP growth for each decade?</em></p>
+<p>Write a line of code that would perform this calculation.</p>
+<div class="fragment">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb103"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb103-1"><a href></a>gdp_decade <span class="sc">|&gt;</span>  </span>
+<span id="cb103-2"><a href></a>  <span class="fu">group_by</span>(decade) <span class="sc">|&gt;</span> </span>
+<span id="cb103-3"><a href></a>  <span class="fu">slice_max</span>(annualized_growth_rate)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 3
+# Groups:   decade [6]
+  `Country Name`         decade     annualized_growth_rate
+  &lt;chr&gt;                  &lt;date&gt;                      &lt;dbl&gt;
+1 Oman                   1960-01-01                 0.414 
+2 Botswana               1970-01-01                 0.155 
+3 Aruba                  1980-01-01                 0.156 
+4 Bosnia and Herzegovina 1990-01-01                 0.312 
+5 Equatorial Guinea      2000-01-01                 0.202 
+6 Ethiopia               2010-01-01                 0.0977</code></pre>
+</div>
 </div>
 </div>
 </section>
