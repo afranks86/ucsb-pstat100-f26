@@ -9,6 +9,7 @@ format:
     scrollable: true
     width: 1280
     embed-resources: true
+    footnotes-hover: true
 execute:
   eval: true
   echo: true
@@ -759,7 +760,7 @@ In practice, we often prefer an estimator with smaller variance as it is on aver
 
 . . . 
 
-_Note_: For an unbiased estimator, variance = average squared distance between $\hat \mu$ and $\mu$. 
+For an unbiased estimator, variance = average squared distance between $\hat \mu$ and $\mu$. 
 
 $$
 E[(\hat \mu - \mu)^2] = E[(\hat \mu - E[\hat \mu])^2] = Var(\hat \mu) 
@@ -783,16 +784,6 @@ var(sample_means)/var(sample_means_replacement)
 The theory matches the simulation: without replacement is 90% the variance of with replacement.
 
 In this case, sampling without replacement yields smaller a variance (and thus better) estimator!
-
-## Challenge
-
-It is standard to calculate the variance of $\hat \mu_{with}$ for IID $Y_i$:
-
-$$
-{\rm Var}[\hat \mu_{with}] = n^{-1}{\rm Var}(Y_1)
-$$
-
-But what about ${\rm Var}[\hat \mu_{without}]$?
 
 ## Swain's Jury Panel Case Study
 
@@ -938,12 +929,50 @@ ggplot(tibble(black_count = sample_count_replacement), aes(x = black_count)) +
 j3
 ```
 
+## Some ethical questions
+
+- How many Black males need to be on the panel for panel to be fairly selected?
+
+. . .
+
+- What are some advantages of random sampling in this context? How might random sampling promote ethical practices?
+
+. . .
+
+- Is random sampling the fairest way to select the panel?
+
+## Sample exclusion 
+
+Often the sampling frame excludes minorities or disadvantaged groups
+
+. . .
+    
+  - Less than 5% of dermatological images in standard U.S. medical textbooks depict darker skin tones^[https://pmc.ncbi.nlm.nih.gov/articles/PMC9762426/]
+    
+. . .
+
+  - Surveys on community perspectives may sample based on property owner registries, which excludes renters and lower-income residents
+
+
+
+# Consent and Privacy
+. . .
+
+- In 2014 Facebook data scientists randomly sampled 690,000+ active users and secretly altered their news feeds by suppressing positive or negative posts
+
+. . .
+    
+- Face recognition datasets created from scraped data without user recognition
+
+. . .
+
+- In 1967, American researchers collected blood samples from the Yanomami people in Brazil during a measles outbreak but were later stored in U.S. biobanks and reused for unrelated genetic research ^[https://www.publicanthropology.org/returning-yanomami-blood-samples/]
 
 # Case study: biased sampling and bias correction
 
-## Sampling bias
+## Weighted Sampling
 
-Let's return to the hawk example.  So far we assumed every hawk was equally likely to enter the sample---$p_i = p_j$ for every pair of units. *Sampling bias* can arise from sampling mechanisms where that is not true.
+Let's return to the hawk example.  So far we assumed every hawk was equally likely to enter the sample. What happens when that is not true?
 
 ::: {.columns}
 
@@ -985,13 +1014,14 @@ Consider:
 
 ## Statistical bias
 
-Statistical **bias** is the average difference between a sample property and a population property across all possible samples under a particular sampling design.
+Statistical **bias** is the average difference between sample estimate and the population quantity across all possible samples under a particular sampling design.
 
-In less technical terms: the expected error of estimates.
+$$ E[\hat \mu] - \mu$$ 
 
-. . . 
 
-Two possible sources of statistical bias:
+## Statistical bias
+
+Statistical bias can arise from poorly designed estimators and/or unrrepresentative sampling 
 
 * An estimator systematically over- or under-estimates its target population property
     + *e.g.*, $\frac{1}{n}\sum_i (x_i - \bar{x})^2$ is biased for (underestimates) the population variance
@@ -1028,6 +1058,8 @@ Usually, length measurements are collected from dead specimens collected opportu
 
 Suppose in particular that female hawks are 9 times as likely to be selected as males.
 
+## A biased sampling design
+
 ```{r}
 hawk_pop_wt <- hawk_pop |>
   mutate(samp_weight = if_else(sex == "female", 9, 1))
@@ -1035,10 +1067,9 @@ hawk_pop_wt <- hawk_pop |>
 head(hawk_pop_wt)
 ```
 
-::: {.columns}
+
+## A biased sampling design 
 ```{r, echo = FALSE}
-#| fig-width: 5
-#| fig-height: 5
 #| warning: false
 
 wt <- tibble(
@@ -1055,9 +1086,9 @@ wt <- tibble(
   theme_bw(base_size=16) +
   theme(legend.position = "bottom")
 
-hist_bysex / wt
+hist_bysex + wt
 ```
-:::
+
 
 ## One biased sample
 
@@ -1087,7 +1118,6 @@ Just as before, we repeat the sampling process many times and look at the sampli
 
 
 ```{r}
-set.seed(40221)
 N_repeat <- 1e3
 
 repeat_result <- tibble()
@@ -1138,12 +1168,20 @@ If
 Then a bias-corrected estimate of the population mean is given by the weighted average:
 
 $$
-\sum_{i\in S} \left(\underbrace{\frac{p_i^{-1}}{\sum_i p_i^{-1}}}_{\text{bias adjustment}}\right) Y_i
+\hat \mu_{IPW} = \sum_{i} w_i Y_i \Big/ \sum_i w_i
 $$
+where the weight is set to $w_i = \frac{1}{p_i}$.
 
 . . . 
 
-The idea is simple---up-weight observations with a lower sampling weight and down-weight observations with a higher sampling weight.
+The idea is simple: up-weight observations with a lower sampling weight and down-weight observations with a higher sampling weight.
+
+## Bias correction
+
+
+Plugging in for $w_i$ we can write $\hat \mu_{IPW}$ as 
+
+$$ \sum_i \left(\frac{p_i^{-1}}{\sum p_j^{-1}}\right)Y_i$$
 
 ## Bias correction example
 
@@ -1202,7 +1240,7 @@ print(samp_w)
 
 ## Does the correction work on average?
 
-One sample is not enough to tell. We repeat the whole pipeline---draw a biased sample, then apply IPW---and look at the sampling distribution of both estimators.
+One sample is not enough to tell. We need to repeat the whole pipeline: sampling hawks according to the selection probabiliities, apply IPW, and repeat.  We can then compare sampling distribution of IPW estimators to the biased SRS estimator.
 
 
 ```{r}
@@ -1261,20 +1299,49 @@ mean(repeat_result$est_ipw) - population_mean   # bias of the IPW estimate
 
 . . . 
 
-- But the correction is not free---compare the spreads:
+- But the correction is has a cost.  Compare the spreads of the estimators:
 
 ```{r}
-sd(repeat_result$est_naive)
-sd(repeat_result$est_ipw)
+var(repeat_result$est_naive)
+var(repeat_result$est_ipw)
 ```
 
 IPW removes the bias at the cost of a larger variance, because the few males in the sample carry most of the weight.
 
-This is called the "bias / variance tradeoff" and is extremely important in all of statistics
+## Bias-Variance Tradeoff
+
+We previously saw that for an *unbiased* estimator, the mean-squared error is the same as the variance. 
+
+In general, for any (possibly biased) estimator,  
+
+$$
+E[(\hat \mu - \mu)^2] = (E[\hat \mu - \mu])^2 + E[(\hat \mu - E[\hat \mu])^2] 
+$$
+in other words:
+
+$$ MSE(\hat \mu) = Bias(\hat \mu)^2 + Var(\hat \mu) $$
+
+This very important result is called the "bias / variance tradeoff" 
+
+## Bias-Variance Tradeoff
+
+```{r}
+bias_naive <- mean(repeat_result$est_naive) - population_mean # bias of the sample mean
+bias_ipw <- mean(repeat_result$est_ipw) - population_mean   # bias of the IPW estimate
+
+var_naive <- var(repeat_result$est_naive)
+var_ipw <- var(repeat_result$est_ipw)
+
+mse_naive <- bias_naive^2 + var_naive
+mse_ipw <- bias_ipw^2 + var_ipw
+
+mse_naive
+mse_ipw
+```
 
 ## Remarks on IPW and bias correction
 
-Inverse probability weighting can be applied to correct a wide range of estimators besides averages.
+Inverse probability weighting can be applied to debias a wide range of estimators besides averages.
 
 . . . 
 
@@ -1287,26 +1354,27 @@ In principle, the technique is simple, but in practice, there are some common hu
 - usually inclusion probabilities are not known
 - estimating inclusion probabilities can be difficult and messy
 
-## When simple isn’t so simple
+## Estimating the Typical Family Size
 
 What is the average family size (children only) in a region, including couples without children?
 
-Will the following sampling scheme give us unbiased results?
+Suppose I can obtain a list of all the children in this area. I use SRS to select a subset of them, visit them, and ask their family size.
+and use those samples to compute the average family size.
 
-. . . 
+. . .
 
-Suppose I can obtain a list of all the children in this area.
-I use SRS to select a subset of them, visit them, and ask their family size.
-Then I take an average of the numbers recorded.
+We previously saw that SRS in the hawks example gave us unbiased estimators. Will it give us an unbiased estimator for family size?
 
-## Family size estimation
+## Choosing the right sampling unit!
 
-It may be easy to imagine that sampling children would lead to an over-estimate, as children from a larger family are more likely to be sampled.
+Sampling children would lead to an over-estimate, as children from larger families are more likely to be sampled.
 
 Consider an extreme case where there are two families of very different sizes.
 
 . . . 
 
-If we want to perform SRS, *the sampling unit should be the family*. Highlights the importance of thinking carefully about the sampling unit as well as the estimation strategy.
+If we want to perform SRS, *the sampling unit should be the family*. If we can't do that, other estimators, like IPW, can help us correct for any bias.
+
+
 
 
