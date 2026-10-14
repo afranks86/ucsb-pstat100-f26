@@ -1,0 +1,471 @@
+---
+title: "PSTAT100_Lab3_extension"
+format: pdf
+---
+
+# Scenario 2: hawks
+
+In this scenario, you'll explore sampling from a population with group structure -- frequently bias can arise from inadvertent uneven sampling of groups within a population.
+
+## Hypothetical population
+
+Suppose you're interested in determining the average beak-to-tail length of red-tailed hawks to help differentiate them from other hawks by sight at a distance. Females and males differ slightly in length -- females are generally larger than males. The cell below generates length measurements for a hypothetical population of 3000 females and 2000 males.
+
+```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message =  FALSE)
+knitr::opts_chunk$set(warning =  FALSE)
+knitr::opts_chunk$set(error =  FALSE)
+bfcolor <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{\\textbf{%s}}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'><b>%s</b></span>", color, x)
+  } else x
+}
+
+# Install necessary libraries if they aren't installed
+if (!require(dplyr)) install.packages("dplyr")
+if (!require(tidyr)) install.packages("tidyr")
+if (!require(ggplot2)) install.packages("ggplot2")
+```
+
+
+```{r}
+# Load libraries
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# Set seed for reproducibility
+set.seed(40721)
+
+# Simulate hypothetical population for female hawks
+female_hawks <- data.frame(
+  length = rnorm(n = 3000, mean = 57.5, sd = 3),
+  sex = rep("female", 3000)
+)
+
+# Simulate hypothetical population for male hawks
+male_hawks <- data.frame(
+  length = rnorm(n = 2000, mean = 50.5, sd = 3),
+  sex = rep("male", 2000)
+)
+
+# Combine the two populations
+population_hawks <- rbind(female_hawks, male_hawks)
+
+# Preview the first 2 rows for each sex
+population_hawks[population_hawks$sex == "female", ][1:2, ]
+population_hawks[population_hawks$sex == "male", ][1:2, ]
+
+```
+
+The cell below produces a histogram of the lengths in the population overall (bottom panel) and when distinguished by sex (top panel).
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(patchwork)
+
+# Base plot for population_hawks
+base <- ggplot(population_hawks, aes(x = length))
+
+# Histogram for the overall population
+hist <- base +
+  geom_histogram(binwidth = 0.75, fill = "red", alpha = 0.5, boundary = 0) +
+  scale_x_continuous(limits = c(40, 70)) +
+  labs(
+    x = "Length (cm)",
+    y = "Number of birds",
+    title = "Overall Histogram"
+  ) +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 5, 5, 5))
+
+# Histogram grouped by sex
+hist_bysex <- base +
+  geom_histogram(aes(fill = sex), binwidth = 0.75, alpha = 0.5, position = "identity", boundary = 0) +
+  scale_x_continuous(limits = c(40, 70)) +
+  scale_fill_manual(values = c("red", "blue")) +
+  labs(
+    x = "Length (cm)",
+    y = "Number of birds",
+    title = "Histogram by Sex"
+  ) +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 5, 5, 5), legend.position = "bottom")
+
+# Combine the histograms vertically
+combined_plot <- hist_bysex / hist
+
+# Display the combined plot
+print(combined_plot)
+```
+
+The population mean -- average length of both female and male red-tailed hawks -- is shown below.
+
+```{r}
+# Compute the mean for numeric columns only
+col_means <- sapply(population_hawks[sapply(population_hawks, is.numeric)], mean)
+
+# Display the results
+col_means
+```
+
+#### **Question 8**
+
+First try drawing a random sample from the population with seed 40821:
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# Set seed for reproducibility
+set.seed(40821)
+
+# Randomly sample 300 rows without replacement
+sample_hawks <- population_hawks[sample(1:nrow(population_hawks), size = 300, replace = FALSE), ]
+
+# View the sampled data
+head(sample_hawks)
+```
+:::
+
+Do you expect that the sample will contain equal numbers of male and female hawks? Think about this for a moment (you don't have to provide a written answer), and then compute the proportions of individuals in the sample of each sex and store the result as a dataframe named `proportion_hawks_sample`. The dataframe should have one column named `proportion` and two rows indexed by `sex`.
+
+*Hint*: group by sex, use `.count()`, and divide by the sample size. Be sure to rename the output column appropriately, as the default behavior produces a column called `length`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# Calculate the proportions of each sex in the sample
+proportion_hawks_sample <- sample_hawks %>%
+  group_by(sex) %>%
+  summarise(proportion = n() / nrow(sample_hawks))
+
+# Display the proportions
+proportion_hawks_sample
+```
+:::
+
+The sample mean is shown below, and is fairly close to the population mean. This should be expected, since you already saw in scenario 1 that random sampling is an unbiased sampling design with respect to the mean.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# Compute the mean for numeric columns only
+sample_hawks_means <- sapply(sample_hawks[sapply(sample_hawks, is.numeric)], mean)
+
+# Display the results
+sample_hawks_means
+```
+:::
+
+### Biased sampling
+
+Let's now consider a biased sampling design. Usually, length measurements are collected from dead specimens collected opportunistically. Imagine that male mortality is higher, so there are better chances of finding dead males than dead females. Suppose in particular that specimens are five times as likely to be male; to represent this situation, we'll assign sampling weights of 5/6 to all male hawks and weights of 1/6 to all female hawks.
+
+```{r}
+# Define the weight function
+weight_fn <- function(sex, p = 5/6) {
+  if (sex == "male") {
+    out <- p
+  } else {
+    out <- 1 - p
+  }
+  return(out)
+}
+
+# Create the weight data frame
+weight_df <- data.frame(
+  length = c(50.5, 57.5),
+  weight = c(5/6, 1/6),
+  sex = c("male", "female")
+)
+
+# Plot the weights as a bar chart
+wt <- ggplot(weight_df, aes(x = length, y = weight, fill = sex)) +
+  geom_bar(stat = "identity", alpha = 0.5) +
+  scale_x_continuous(limits = c(40, 70)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = "Length",
+    y = "Weight",
+    title = "Weight by Sex"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 12)
+  )
+
+# Combine the bar chart with hist_bysex (assumes hist_bysex is already defined)
+combined_plot <- hist_bysex / wt
+
+# Display the combined plot
+print(combined_plot)
+```
+
+#### **Question 9**
+
+Draw a weighted sample `sample_hawks_biased` from the population `population_hawks` using the weights defined by `weight_fn`, and compute and store the value of the sample mean as `sample_hawks_biased_mean`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# For reproducibility
+set.seed(40821)
+
+# Define the weight function
+weight_fn <- function(sex, p = 5/6) {
+  if (sex == "male") {
+    return(p)
+  } else {
+    return(1 - p)
+  }
+}
+
+# Assign weights to the population
+population_hawks$weight <- sapply(population_hawks$sex, weight_fn)
+
+# Draw a weighted sample
+sample_hawks_biased <- population_hawks[sample(1:nrow(population_hawks), size = 300, replace = FALSE, prob = population_hawks$weight), ]
+
+# Compute the mean of the sample
+sample_hawks_biased_mean <- mean(sample_hawks_biased$length)
+
+# Display the result
+sample_hawks_biased_mean
+```
+:::
+
+#### **Question 10**
+
+Investigate the bias of the sample mean by:
+
+-   drawing 1000 samples with observations weighted by `weight_fn`;
+-   storing the sample mean from each sample as `samp_means_hawks`;
+-   computing the average difference between the sample means and the population mean and storing the resulting value as `avg_diff_hawks`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# For reproducibility
+set.seed(40221)
+
+# Number of samples to simulate
+nsim <- 1000
+
+# Storage for the sample means
+samp_means_hawks <- numeric(nsim)
+
+# Define the weight function
+weight_fn <- function(sex, p = 5/6) {
+  if (sex == "male") {
+    return(p)
+  } else {
+    return(1 - p)
+  }
+}
+
+# Assign weights to the population
+population_hawks$weight <- sapply(population_hawks$sex, weight_fn)
+
+# Repeatedly sample and store the sample mean in the samp_means array
+for (i in 1:nsim) {
+  sample_hawks <- population_hawks[
+    sample(
+      1:nrow(population_hawks),
+      size = 300,
+      replace = FALSE,
+      prob = population_hawks$weight
+    ), ]
+  samp_means_hawks[i] <- mean(sample_hawks$length)
+}
+
+# Compute the average difference between the sample means and the population mean
+avg_diff_hawks <- mean(samp_means_hawks - mean(population_hawks$length))
+
+# Display the result
+avg_diff_hawks
+```
+:::
+
+#### **Question 11**
+
+Reflect a moment on your simulation result in question 10. If instead *female* mortality is higher and specimens for measurement are collected opportunistically, as described in the previous sampling design, do you expect that the average length in the sample will be an underestimate or an overestimate of the population mean? Explain why in 1-2 sentences, and carry out a simulation to check your intuition.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# Set seed for reproducibility
+set.seed(40221)
+
+# Invert weights: Higher weights for females and lower for males
+weight_fn_inverted <- function(sex, p = 5/6) {
+  if (sex == "male") {
+    return(1 - p) # Lower weight for males
+  } else {
+    return(p)     # Higher weight for females
+  }
+}
+
+# Assign inverted weights to the population
+population_hawks$weight_inverted <- sapply(population_hawks$sex, weight_fn_inverted)
+
+# Number of samples to simulate
+nsim <- 1000
+
+# Storage for the sample means
+samp_means_hawks_inverted <- numeric(nsim)
+
+# Repeatedly sample and store the sample mean
+for (i in 1:nsim) {
+  sample_hawks_inverted <- population_hawks[
+    sample(
+      1:nrow(population_hawks),
+      size = 300,
+      replace = FALSE,
+      prob = population_hawks$weight_inverted
+    ), ]
+  samp_means_hawks_inverted[i] <- mean(sample_hawks_inverted$length)
+}
+
+# Compute bias: Average difference between sample means and population mean
+estimated_bias <- mean(samp_means_hawks_inverted - mean(population_hawks$length))
+
+# Display the result
+estimated_bias
+```
+:::
+
+Answer: If female mortality is higher, more females will be included in the sample. Since females have larger average lengths than males, this would cause the sample to overestimate the population mean because the sample will overrepresent females with longer average lengths.
+
+### Bias correction
+
+*What can be done if a sampling design is biased? Is there any remedy?*
+
+You've seen some examples above of how bias can arise from a sampling mechanism in which units have unequal chances of being selected in the sample. Ideally, we'd work with random samples all the time, but that's not very realistic in practice. Fortunately, biased sampling is not a hopeless case -- **it is possible to apply bias corrections if you have good information about which individuals were more likely to be sampled**.
+
+To illustrate how this would work, let's revisit the biased sampling in scenario 1 -- sampling larger eucalyptus seeds more often than smaller ones. Imagine you realize the mistake and conduct a quick experiment with your sieve to determine the proportion of seeds of each size that pass through, and use this to estimate the inclusion probabilities. (To simplify this excercise, we'll just use sampling weights we defined to calculate the actual inclusion probabilities.)
+
+The cell below generates the population and sample from scenario 2 again:
+
+```{r}
+# Set seed for reproducibility
+set.seed(40221)
+
+# Simulate seed diameters
+population3 <- data.frame(
+  seed = 0:(5000 - 1),
+  diameter = rgamma(n = 5000, shape = 2, scale = 1/2)
+)
+
+# Define the weight function for inclusion probability
+weight_fn <- function(x, r = 2, c = 2) {
+  1 / (1 + exp(-r * (x - c)))
+}
+
+# Assign inclusion probability to each seed
+population3$samp_weight <- weight_fn(population3$diameter)
+
+# Draw weighted sample
+set.seed(40721) # For reproducibility
+sample3 <- population3[sample(1:nrow(population3), size = 250, replace = FALSE, prob = population3$samp_weight), ]
+
+# View the weighted sample
+head(sample3)
+```
+
+The sample mean and population mean you calculated earlier are shown below:
+
+```{r}
+# Calculate sample and population means
+means <- c(
+  `sample mean` = mean(sample3$diameter),
+  `population mean` = mean(population3$diameter)
+)
+
+# Print the means
+print(means)
+```
+
+We can obtain an unbiased estimate of the population mean by computing a *weighted average* of the diameter measurements instead of the sample average after weighting the measurements in inverse proportion to the sampling weights:
+
+$$\text{weighted average} = \sum_{i = 1}^{250} \underbrace{\left(\frac{w_i^{-1}}{\sum_{j = 1}^{250} w_j^{-1}}\right)}_{\text{bias adjustment}} \times \text{diameter}_i$$
+
+This might look a little complicated, but the idea is simple -- the weighted average corrects for bias by simply up-weighting observations with a lower sampling weight and down-weighting observations with a higher sampling weight.
+
+The cell below performs this calculation.
+
+```{r}
+sample3$bias_adjustment <- (sample3$samp_weight^(-1)) / sum(sample3$samp_weight^(-1))
+
+# Weight diameter measurements
+sample3$weighted_diameter <- sample3$diameter * sample3$bias_adjustment
+
+# Sum to compute weighted average
+weighted_average <- sum(sample3$weighted_diameter)
+
+# Display the result
+weighted_average
+```
+
+Notice that the weighted average successfully corrected for the bias:
+
+```{r}
+# Calculate sample mean, weighted average, and population mean
+means <- c(
+  `sample mean` = mean(sample3$diameter),
+  `weighted average` = sum(sample3$weighted_diameter),
+  `population mean` = mean(population3$diameter)
+)
+
+# Print the results
+print(means)
+
+```
+
+#### **Question 12**
+
+Perform a bias correction for the hawk scenario, using the actual inclusion probabilities, in the following steps:
+
+-   redraw `sample_hawks_biased` from question 9 exactly (use the same RNG seed) and retain the `weight` column
+-   compute the 'raw' sample mean and store the resulting value as `sample_mean`
+-   compute a bias adjustment factor as illustrated above by normalizing the inverse weights, and append the adjustment factor as a new column in `sample_hawks_biased` named `bias_adjustment`
+-   compute a weighted average length and store the resulting value as as `sample_mean_corrected`
+
+Print the raw and corrected sample means.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+set.seed(40821) # for reproducibility
+
+# Assuming hawks_biased is already available
+# Sample with bias and retain weights
+sample_hawks_biased <- population_hawks[sample(1:nrow(population_hawks), size = 100, replace = TRUE, prob = population_hawks$weight), ]
+
+# Compute the raw sample mean
+sample_mean <- mean(sample_hawks_biased$length)
+
+# Define the bias correction factor by normalizing the inverse weights
+total_weight <- sum(1 / sample_hawks_biased$weight)
+sample_hawks_biased$bias_adjustment <- (1 / sample_hawks_biased$weight) / total_weight
+
+# Compute the weighted average length
+sample_mean_corrected <- sum(sample_hawks_biased$length * sample_hawks_biased$bias_adjustment)
+
+# Print the raw and corrected sample means
+print(paste("Raw Sample Mean:", sample_mean))
+print(paste("Corrected Sample Mean:", sample_mean_corrected))
+```
+:::
