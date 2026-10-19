@@ -1,0 +1,434 @@
+---
+title: "PSTAT 100 Fall 25"
+format: pdf
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message =  FALSE)
+knitr::opts_chunk$set(warning =  FALSE)
+knitr::opts_chunk$set(error =  FALSE)
+bfcolor <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{\\textbf{%s}}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'><b>%s</b></span>", color, x)
+  } else x
+}
+
+# Install necessary libraries if they aren't installed
+if (!require(dplyr)) install.packages("dplyr")
+if (!require(tidyr)) install.packages("tidyr")
+if (!require(ggplot2)) install.packages("ggplot2")
+```
+
+# Lab 3: Sampling designs and statistical bias overview with R
+
+In this lab you'll explore through simulation how nonrandom sampling can produce datasets with statistical properties that are distored relative to the population that the sample was drawn from. This kind of distortion is known as **bias**.
+
+In common usage, the word 'bias' means disproportion or unfairness. In statistics, the concept has the same connotation -- biased sampling favors certain observational units over others, and biased estimates are estimates that favor larger or smaller values than the truth. The goal of this lab is to refine your understanding about what statistical bias is and is not and develop your intuition about potential mechanisms by which bias is introduced and the effect that this can have on sample statistics.
+
+## Objectives
+
+This lab covers the following topics:
+
+-   **Simulate biased and unbiased sampling designs**
+-   **Examine the impact of sampling bias on the sample mean**
+-   **Apply a simple bias correction by inverse probability weighting**
+
+```{r}
+# Load libraries
+library(dplyr)
+library(ggplot2)
+```
+
+# Background
+
+## Sampling designs
+
+The **sampling design** of a study refers to ***the way observational units are selected*** from the collection of all observational units. Any design can be expressed by the probability that each unit is included in the sample. In a random sample, all units are equally likely to be included.
+
+For example, you might want to learn about U.S. residents (population), but only be able for ethical or practical reasons to study adults (sampling frame), and decide to do a mail survey of 2000 randomly selected addresses in each state (sampling design). Each collection of 2000 addresses may constitute a random sample of households, but even with a 100% response rate the survey results will not be a random sample of adult U.S. residents because individuals share addresses and the population sizes are different from state to state.
+
+## Bias
+
+Formally, **bias** describes ***the 'typical' deviation of a sample statistic the correspongind population value***.
+
+For example, if a particular sampling design tends to produce an average measurement around 1.5 units, but the true average in the population is 2 units, then the estimate has a bias of -0.5 units. The language 'typical' and 'tends to' is important here. Estimates are never perfect, so just because an estimate is off by -0.5 units for one sample doesn't make it biased -- it is only biased if it is *consistently* off.
+
+Although bias is technically a property of a sample statistic (like the sample average), it's common to talk about a biased *sample* -- this term refers to a dataset collected using a sampling design that produces biased statistics.
+
+This is exactly what you'll explore in this lab -- the relationship between sampling design and bias.
+
+## Simulated data
+
+You will be simulating data in this lab. **Simulation** is a great means of exploration ***because you can control the population properties***, which are generally unknown in practice.
+
+When working with real data, you just have one dataset, and you don't know any of the properties of the population or what might have happened if a different sample were collected. That makes it difficult to understand sampling variation and impossible to directly compare the sample properties to the population properties.
+
+With simulated data, by contrast, you control how data are generated with exact precision -- so by extension, you know everything there is to know about the population. In addition, repeated simulation of data makes it possible to explore the typical behavior of a particular sampling design, so you can learn 'what usually happens' for a particular sampling design by direct observation.
+
+# Scenario 1: Eucalyptus seed diameters
+
+In this scenario you'll compare the sample mean and the distribution of sample values for a single viariable with the population mean and distribution of population values for an unbiased sampling design.
+
+## Hypothetical population
+
+To provide a little context to this scenario, imagine that you're measuring eucalyptus seeds to determine their typical diameter. The cell below simulates diameter measurements for a hypothetical population of 5000 seeds; imagine that this is the total number of seeds in a small grove at some point in time.
+
+```{r}
+# Load necessary library
+set.seed(40221) # for reproducibility
+
+# Simulate seed diameters
+population <- data.frame(
+  diameter = rgamma(n = 5000, shape = 2, scale = 1/2),
+  seed = 0:(5000 - 1)
+)
+
+# Check first few rows
+head(population, 3)
+```
+
+#### **Question 1**
+
+Calculate the mean diameter for the hypothetical population and store the value as \`mean_diameter\`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+#### **Question 2**
+
+Calculate the standard deviation of diameters for the hypothetical population and store the value as `std_dev_pop_diameter`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+The chunk below produces a histogram of the population values -- the distribution of diameter measurements among the hypothetical population -- with a vertical line indicating the population mean.
+
+```{r,eval = FALSE}
+hist_pop <- ggplot(population, aes(x = diameter)) +
+  geom_histogram(binwidth = 0.3, fill = "steelblue", alpha = 0.8, boundary = 0) +
+  geom_vline(aes(xintercept = mean_diameter), color = "blue", linetype = "dashed", size = 1) +
+  labs(
+    x = "Diameter (mm)",
+    y = "Number of seeds in population",
+    title = "Histogram of Seed Diameters with Population Mean"
+  ) +
+  xlim(0, 6) +
+  theme_minimal()
+
+# Display the plot
+print(hist_pop)
+```
+
+#### Random Sampling
+
+Imagine that your sampling design involves collecting bunches of plant material from several locations in the grove and sifting out the seeds with a fine sieve until you obtaining 250 seeds. We'll suppose that using your collection method, any of the 5000 seeds is equally likely to be obtained, so that your 250 seeds comprise a *random sample* of the population.
+
+We can simulate samples obtained using your hypothetical design by drawing values without replacement from the population.
+
+```{r}
+# Set seed for reproducibility
+set.seed(40221)
+
+# Draw a random sample of 250 seeds without replacement
+sample <- population[sample(1:nrow(population), size = 250, replace = FALSE), ]
+
+# View the sample
+head(sample)
+```
+
+#### **Question 3**
+
+Calculate the mean diameter of seeds in the simulated sample and store the value as `mean_sample_diameter`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+You should see above that the sample mean is close to the population mean. In fact, *all* sample statistics are close to the population; this can be seen by comparing the distribution of sample values with the distribution of population values.
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(patchwork)
+
+# Calculate means
+mean_sample_diameter <- mean(sample$diameter)
+mean_population_diameter <- mean(population$diameter)
+
+# Create histogram for the sample
+hist_samp <- ggplot(sample, aes(x = diameter)) +
+  geom_histogram(binwidth = 0.3, fill = "steelblue", alpha = 0.8, boundary = 0) +
+  geom_vline(aes(xintercept = mean_sample_diameter), color = "blue", linetype = "dashed", size = 1) +
+  labs(
+    x = "Diameter (mm)",
+    y = "Number of seeds in sample",
+    title = "Sample Histogram"
+  ) +
+  xlim(0, 6) +
+  theme_minimal()
+
+# Create histogram for the population
+hist_pop <- ggplot(population, aes(x = diameter)) +
+  geom_histogram(binwidth = 0.3, fill = "steelblue", alpha = 0.8, boundary = 0) +
+  geom_vline(aes(xintercept = mean_population_diameter), color = "blue", linetype = "dashed", size = 1) +
+  labs(
+    x = "Diameter (mm)",
+    y = "Number of seeds in population",
+    title = "Population Histogram"
+  ) +
+  xlim(0, 6) +
+  theme_minimal()
+
+# Display the combined plot
+print(hist_samp)
+print(hist_pop)
+```
+
+While there are some small differences, the overall shape is similar and the sample mean is almost exactly the same as the population mean. So with this sampling design, you obtained a dataset with few distortions of the population properties, and the sample mean is a good estimate of the population mean.
+
+### Assessing bias through simulation
+
+You may wonder: *does that happen all the time, or was this just a lucky draw?* This question can be answered by simulating a large number of samples and checking the average behavior to see whether the undistorted representation of the population is typical for this sampling design.
+
+The cell below estimates the bias of the sample mean by:
+
+-   drawing 1000 samples of size 250;
+-   storing the sample mean from each sample;
+-   computing the average difference between the sample means and the population mean.
+
+```{r}
+# Set seed for reproducibility
+set.seed(40221)
+
+# Number of samples to simulate
+nsim <- 1000
+
+# Storage for the sample means
+samp_means <- numeric(nsim)
+
+# Repeatedly sample and store the sample mean
+for (i in 1:nsim) {
+  samp_means[i] <- mean(population[sample(1:nrow(population), size = 250, replace = FALSE), "diameter"])
+}
+
+# Check the length of samp_means
+length(samp_means)
+```
+
+The bias of the sample mean is its average distance from the population mean. We can estimate this using our simulation results as follows:
+
+```{r}
+# Calculate the bias
+bias <- mean(samp_means) - mean(population$diameter)
+
+# Display the bias
+bias
+```
+
+So the average error observed in 1000 simulations was about 0.001 mm! This suggests that the sample mean is *unbiased*: on average, there is no error. Therefore, at least with respect to estimating the population mean, random samples appear to be *unbiased samples*.
+
+However, **unbiasedness does not mean that you won't observe estimation error**. There is a natural amount of variability from sample to sample, because in each sample a different collection of seeds is measured. We can estimate this as well using the simulation results by checking the standard deviation of the sample means across all 1000 samples:
+
+```{r}
+# Calculate the standard deviation of sample means
+std_samp_means <- sd(samp_means)
+
+# Display the standard deviation
+std_samp_means
+```
+
+So on average, the sample mean varies by about 0.04 mm from sample to sample.
+
+We could also check how much the sample mean deviates from the population mean on average by computing *root mean squared error*:
+
+```{r}
+# Calculate the custom standard deviation
+sqrt(sum((samp_means - mean(population$diameter))^2) / 1000)
+```
+
+Note that this is very close to the variance of the sample mean across simulations, but not exactly the same; this latter calculation measures the spread around the population mean, and is a conventional measure of estimation accuracy.
+
+The cell below plots a histogram representing the distribution of values of the sample mean across the 1000 samples you simulated (this is known as the *sampling distribution* of the sample mean). It shows a peak right at the population mean (blue vertical line) but some symmetric variation to either side -- most values are between about 0.93 and 1.12.
+
+```{r}
+# Load required library
+library(ggplot2)
+
+# Create a data frame for the sampling distribution
+sampling_data <- data.frame(sample_mean = samp_means)
+
+# Calculate the population mean
+mean_population_diameter <- mean(population$diameter)
+
+# Plot the sampling distribution
+ggplot(sampling_data, aes(x = sample_mean)) +
+  geom_histogram(binwidth = 0.01, fill = "steelblue", alpha = 0.8) +
+  geom_vline(xintercept = mean_population_diameter, color = "blue", linetype = "dashed") +
+  labs(
+    x = "Value of sample mean",
+    y = "Number of simulations",
+    title = "Simulated Sampling Distribution"
+  ) +
+  theme_minimal()
+```
+
+### Biased sampling
+
+In this scenario, you'll use the same hypothetical population of eucalyptus seed diameter measurements and explore the impact of a biased sampling design.
+
+In the first design, you were asked to imagine that you collected and sifted plant material to obtain seeds. Suppose you didn't know that the typical seed is about 1mm in diameter and decided to use a sieve that is a little too coarse, tending only to sift out larger seeds and letting smaller seeds pass through. As a result, small seeds have a lower probability of being included in the sample and large seeds have a higher probability of being included in the sample.
+
+This kind of sampling design can be described by assigning differential *sampling weights* $w_1, \dots, w_N$ to each observation. The cell below defines some hypothetical weights such that larger diameters are more likely to be sampled.
+
+```{r}
+# Create a copy of the population data frame
+population_mod1 <- data.frame(population)
+```
+
+```{r}
+# Define the weight function
+weight_fn <- function(x, r = 10, c = 1.5) {
+  1 / (1 + exp(-r * (x - c)))
+}
+
+# Create a grid of values to use in plotting the function
+grid <- seq(0, 6, length.out = 100)
+weight_df <- data.frame(
+  seed_diameter = grid,
+  weight = weight_fn(grid)
+)
+
+# Plot inclusion probability against diameter
+weight_plot <- ggplot(weight_df, aes(x = seed_diameter, y = weight)) +
+  geom_area(alpha = 0.3, fill = "steelblue") +  # Area plot
+  geom_line(color = "black") +                  # Line plot on top of the area
+  labs(
+    x = "Seed Diameter",
+    y = "Inclusion Weight",
+    title = "Inclusion Probability vs. Diameter"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 12))
+
+# Display the plot
+print(weight_plot)
+```
+
+The actual probability that a seed is included in the sample -- its **inclusion probability** -- is proportional to the sampling weight. These inclusion probabilities $\pi_i$ can be calculated by normalizing the weights \$w_i\$ over all seeds in the population $i = 1, \dots, 5000$:
+
+$\pi_i = \frac{w_i}{\sum_i w_i}$
+
+It may help you to picture how the weights will be used in sampling to line up this plot with the population distribution. In effect, we will sample more from the right tail of the population distribution, where the weight is nearest to 1.
+
+The following cell draws a sample with replacement from the hypothetical seed population *with seeds weighted according to the inclusion probability given by the function above*.
+
+```{r}
+# Define the weight function
+weight_fn <- function(x, r = 10, c = 1.5) {
+  1 / (1 + exp(-r * (x - c)))
+}
+
+# Assign weight to each seed
+population_mod1 <- population # Create a copy
+population_mod1$weight <- weight_fn(population_mod1$diameter)
+
+# Draw weighted sample
+set.seed(40721) # For reproducibility
+sample2 <- population_mod1[sample(1:nrow(population_mod1), size = 250, replace = FALSE, prob = population_mod1$weight), "diameter", drop = FALSE]
+
+# View the weighted sample
+dim(sample2)
+```
+
+#### **Question 4**
+
+Calculate the mean diameter of seeds in the simulated sample and store the value as `mean_sample2_diameter`.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+#### **Question 5**
+
+Show side-by-side plots of the distribution of sample values and the distribution of population values, with vertical lines indicating the corresponding mean on each plot.
+
+*Hint*: copy the cell that produced this plot in scenario 1 and replace `sample` with `sample2`. Utilizing different methods is also welcome.
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+### Assessing bias through simulation
+
+Here you'll mimic the simulation done in scenario 1 to assess the bias of the sample mean under this new sampling design.
+
+```{r}
+head(population_mod1)
+```
+
+#### **Question 6**
+
+Investigate the bias of the sample mean by:
+
+-   drawing 1000 samples with observations weighted by inclusion probability;
+-   storing the collection of sample means from each sample as `samp_means`;
+-   computing the average difference between the sample means and the population mean (in that order!) and storing the result as `avg_diff`.
+
+(*Hint*: copy the cell that performs this simulation in scenario 1, and be sure to replace `population` with `population_mod1` and adjust the sampling step to include `weights = ...` with the appropriate argument.)
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+::: callout
+```{r}
+# replace with your codes
+```
+:::
+
+#### **Question 7**
+
+Does this sampling design seem to introduce bias? If so, does the sample mean tend to over-estimate or under-estimate the population mean?
+
+`r bfcolor("YOUR ANSWER:", "red")`\
+
+:::
+
+# Takeaways
+
+These simulations illustrate through a few simple examples that random sampling -- a sampling design where each unit is equally likely to be selected -- produces unbiased sample means. That means that 'typical samples' will yield sample averages that are close to the population value. By contrast, deviations from random sampling tend to yield biased sample averages -- in other words, nonrandom sampling tends to distort the statistical properties of the population in ways that can produce misleading conclusions (if uncorrected).
+
+Here are a few key points to reflect on:
+
+-   bias is not a property of an individual sample, but of a *sampling design*
+    -   unbiased sampling designs tend to produce faithful representations of populations
+    -   but there are no guarantees for individual samples
+-   if you hadn't known the population distributions, there would have been no computational method to detect bias
+    -   in practice, it's necessary to *reason* about whether the sampling design is sound
+-   the sample statistic (sample mean) was only reliable when the sampling design was sound
+    -   the quality of data collection is arguably more important for reaching reliable conclusions than the choice of statistic or method of analysis
+
+### If you are interested in sampling from a population with group structure, "PSTAT_Lab3_extension" will provide a detailed example.
