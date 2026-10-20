@@ -1063,6 +1063,21 @@ ggplot(diamonds, aes(x = x, y = y)) +
 
 <center>What do you notice? What can be done?</center>
 
+## Naming the outliers
+
+Labelling the extreme points tells us *which* values are the problem:
+
+```{r, echo=TRUE}
+#| output-location: slide
+ggplot(diamonds, aes(x = x, y = y)) +
+  geom_point() +
+  geom_text(data = subset(diamonds, x < 3), aes(label = x), nudge_y = 2) +
+  geom_text(data = subset(diamonds, y > 30), aes(label = y), nudge_y = 2) +
+  theme_bw()
+```
+
+A diamond cannot have a length of 0 mm, or be 58.9 mm wide and 5 mm long. These are *data entry mistakes*, not discoveries.
+
 ## Outliers and artifacts
 
 
@@ -1075,6 +1090,18 @@ diamonds %>%
 ggplot(aes(x = x, y = y)) + 
   geom_point(size=0.1) + theme_bw() 
 ```
+
+Zooming in and excluding the outliers reveals the underlying relationship much more clearly.
+
+## Handling outliers
+
+- Best to **pre-specify your criteria** for excluding outliers before the analysis
+
+- Show results **with and without** outliers removed. Clearly state:
+    + how many observations were excluded (here, 10 of 53,940)
+    + the method used for detection
+    + how the results differ between the two analyses
+
 
 ## Outliers and artifacts
 
@@ -1154,14 +1181,29 @@ diamonds |> ggplot(aes(x=price)) +
   geom_histogram(binwidth=100)
 ```
 
-## Outliers and artifacts
+## Anomalies
 
-Zooming in:
+Zooming in, there are *no diamonds at all* priced at $1500?
 
 ```{r, echo=TRUE}
+#| output-location: slide
 diamonds |> ggplot(aes(x=price)) + 
   geom_histogram(binwidth=25) + xlim(c(0, 2500))
 ```
+
+## Anomalies
+
+Buried in a reddit thread:
+
+<center>![](figures/diamonds1.png){width="70%"}</center>
+
+. . .
+
+<center>![](figures/diamonds2.png){width="70%"}</center>
+
+. . .
+
+Many plausible theories but the answer was a missed page while scraping. **Occam's razor:** assume the simplest explanation (e.g a mistake in the data) before you investigate more complex explanations.
 
 ## Outliers and artifacts
 
@@ -1178,6 +1220,21 @@ diamonds |> ggplot() +
 ```{r, echo=TRUE}
 diamonds |> ggplot() + geom_point(aes(x=x, y=carat))
 ```
+
+## Concepts covered in the diamonds data {.smaller}
+
+- **Outliers.** `x = 0` is physically impossible. 
+
+- **Overplotting.** With 50,000 observations a scatterplot turns into a solid blob. Hex bins, smaller points, and opacity each reveal different structure.
+
+- **Resolution.** The default histogram of length hid important structure. Making the binwidth smaller exposed clusters.
+
+- **Artifacts and anomalies.** The missing \$1,500 diamonds are a property of how the data were collected (or weren't collected!) not a property of diamonds themselves.
+
+- **Clustering and hidden variables.** Carat vs price falls into vertical bands. Buyers round up.
+
+- **Occam's razor.** The simplest explanation is usually the best. 
+
 
 ## Billboard Data
 
@@ -1233,8 +1290,43 @@ billboard_long |>
   group_by(week) |> 
   summarize(frac_missing = mean(is.na(rank))) |> 
   ggplot() + geom_line(aes(x=week, y=frac_missing)) + 
-  theme_bw(base_size=16)
+  theme_bw(base_size=16) +
+  xlab("Weeks since entering top 100") + ylab("Fraction missing")
 ```
+
+<center>What does "fraction missing correspond to"?</center>
+
+## Exploring Missingness
+
+
+
+```{r, echo=TRUE}
+#| output-location: slide
+billboard_long |> 
+  group_by(week) |> 
+  summarize(frac_missing = mean(is.na(rank))) |> 
+  ggplot() + geom_line(aes(x=week, y=frac_missing)) + 
+  theme_bw(base_size=16) +
+  xlab("Weeks on top 100") + ylab("Percent of Songs")
+```
+
+<center>What do you notice?</center>
+
+## The Recurrent Rule
+
+> If a song has been on the Hot 100 chart for 20 weeks and is not currently inside the top 50 (or lacks strong upward momentum), Billboard automatically removes it from the chart, to prevent long-running hits from stagnating the rankings and blocking new entries.
+
+
+## Concepts covered in the billboard data {.smaller}
+
+- **Tidying helps plotting.** `wk1...wk76` are values of a variable, not 76 variables.
+
+- **Color vs. grouping.** Jay-Z has five songs and without the grouping they get drawn as one line. Set `col = artist` and `group = track` to see all of them.
+
+- **Choices for the x-axis.** Weeks-since-entering vs. calendar date answer different questions about the same data.
+
+- **Missingness is data.** The fraction of missing values at each week has meaning in the context of the Billboard chart.
+
 
 ## Comparing data across groups
 
@@ -1312,24 +1404,38 @@ pop |>
   scale_y_continuous(breaks=1:10)
 ```
 
+## Concepts covered {.smaller}
+
+- **Absolute and relative answer different questions.** Since 1960 Oman's population grew 9-fold and the US grew 12-fold. But the US added 148 million people and Oman added 4.4 million.
+
+- **Shared axes vs separate axes.** The first plot has a shared y-axis, which makes it easy to compare absolute levels. The second plot has separate y-axes, which makes it easy to compare relative growth.
+
+- **Normalizing requires a baseline.** Results depend on choosing 1960.  A different baseline year might tell a different story.
+
+
 ## Workflow tips and advice {.smaller}
 
-Developing graphics is an iterative trial-and-error process:
+Developing a graphic is iterative trial and error. A reasonable loop:
 
-- **Hone in on an essential question or relationship.** 
-    - This might require making a few crude plots to help you decide where to focus.
+- **Start with a question.** e.g. "Does the gender gap shrink with income?", not "let's make a bar chart." 
 
-- **Start simple.** 
-    - Begin with the most basic plot you can.
+- **Make the crudest version first.** Default geom, default theme, no labels. You are only asking whether there is anything there at all.
 
-- **Add complexity as you go.**
-    - Decide what to add or change based on *your own questions* rather than an envisioned endpoint.
+- **Change one thing at a time.** 
 
-- **Change one thing at a time, and keep copies.**
-    - You might well need to backtrack.
+- **Ask new questions based on what you see in the plots.** Most of what we saw today came from reacting to something we saw in a plot, not from a pre-specified plan.
 
-- **Don't be afraid of starting over.**
-    - If an idea doesn't pan out, no harm done!
+## Some additional tips
+
+| Symptom | Things to try |
+|-------------------------------|--------------------------------------------|
+| Solid blob of points | smaller points, `alpha`, `geom_hex()` |
+| A few outlier points ruin the scale | set a rule for removing and report what you dropped |
+| Distribution looks featureless | change `binwidth`, zoom in  |
+| Too many lines or colors | facet, or gray out everything but the ones you mean |
+| Groups on wildly different scales | plot relative change instead of absolute |
+| Two panels you can't compare | one shared axis instead of `patchwork` |
+| Reader can't find the point | say it in the title and provide a label directly instead of a legend |
 
 <!-- ## -->
 
@@ -1367,31 +1473,3 @@ Developing graphics is an iterative trial-and-error process:
 <!-- - **Pleasant**. Visuals should be nice to look at! -->
 <!--     - Do you smile a little when you open up that plot? -->
 
-# Summary
-
-This has been a primer on visualization basics. We touched on the following points:
-
-- The elements of statistical graphics are axes, geometric objects, aesthetics, and text
-
-- Statistical graphics are constructed by mapping dataframe columns to geometric objects and aesthetics
-    - Allows for display of complex information
-    - Specified in Altair as marks and encodings on a chart
-
-- The basic statistical graphics are histograms, boxplots, scatterplots, line plots, and barplots.
-    - Think of these as building blocks you can use to develop more sophisticated visualizations
-
-- Effective data visualizations are novel, informative, efficient/economical, and pleasing.
-
-- Developing visualizations is an iterative process
-    - Start simple, add complexity, and experiment!
-
-You will refine your understanding as you use these tools in context, and see many examples throughout the course. 
-
-## Summary
-- Make sure text and numbers are large enough!
-- Avoid putting too much in a single plot 
-- Label axes and include units of measurements
-- Scale axes appropriately
-- Add a legend or caption to the plot explaining symbols or colors, etc
-- Each plot should be self-explanatory without having to refer to the text
-- Use ggplot2 + companion libraries

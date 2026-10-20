@@ -561,7 +561,7 @@
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href=""></a>gdp_per_cap <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">"data/lab3-data.csv"</span>)</span>
 <span id="cb9-2"><a href=""></a></span>
 <span id="cb9-3"><a href=""></a>gdp_per_cap <span class="sc">|&gt;</span> </span>
-<span id="cb9-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span><span class="st">`</span><span class="at">GDP per capita</span><span class="st">`</span>, <span class="at">y=</span>All)) <span class="sc">+</span> </span>
+<span id="cb9-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span><span class="fu">log</span>(<span class="st">`</span><span class="at">GDP per capita</span><span class="st">`</span>), <span class="at">y=</span>All)) <span class="sc">+</span> </span>
 <span id="cb9-5"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Life Expectancy"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
@@ -1196,39 +1196,73 @@ $ z       &lt;dbl&gt; 2.43, 2.31, 2.31, 2.63, 2.75, 2.48, 2.47, 2.53, 2.49, 2.39
 What do you notice? What can be done?
 </center>
 </section>
-<section id="outliers-and-artifacts" class="slide level2">
+<section id="naming-the-outliers" class="slide level2">
+<h2>Naming the outliers</h2>
+<p>Labelling the extreme points tells us <em>which</em> values are the problem:</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href=""></a><span class="fu">ggplot</span>(diamonds, <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y)) <span class="sc">+</span></span>
+<span id="cb32-2"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb32-3"><a href=""></a>  <span class="fu">geom_text</span>(<span class="at">data =</span> <span class="fu">subset</span>(diamonds, x <span class="sc">&lt;</span> <span class="dv">3</span>), <span class="fu">aes</span>(<span class="at">label =</span> x), <span class="at">nudge_y =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb32-4"><a href=""></a>  <span class="fu">geom_text</span>(<span class="at">data =</span> <span class="fu">subset</span>(diamonds, y <span class="sc">&gt;</span> <span class="dv">30</span>), <span class="fu">aes</span>(<span class="at">label =</span> y), <span class="at">nudge_y =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb32-5"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+<p>A diamond cannot have a length of 0 mm, or be 58.9 mm wide and 5 mm long. These are <em>data entry mistakes</em>, not discoveries.</p>
+</section>
+<section id="naming-the-outliers-output" class="slide level2 output-location-slide"><h2>Naming the outliers</h2><div class="cell output-location-slide" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-37-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="outliers-and-artifacts" class="slide level2">
 <h2>Outliers and artifacts</h2>
 <div class="cell" data-layout-align="center">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
-<span id="cb32-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb32-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y)) <span class="sc">+</span> </span>
-<span id="cb32-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
+<span id="cb33-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb33-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y)) <span class="sc">+</span> </span>
+<span id="cb33-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 
 </div>
-<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-37-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
+<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-38-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"><p>Zooming in and excluding the outliers reveals the underlying relationship much more clearly.</p>
+</section>
+<section id="handling-outliers" class="slide level2">
+<h2>Handling outliers</h2>
+<ul>
+<li><p>Best to <strong>pre-specify your criteria</strong> for excluding outliers before the analysis</p></li>
+<li><p>Show results <strong>with and without</strong> outliers removed. Clearly state:</p>
+<ul>
+<li>how many observations were excluded (here, 10 of 53,940)</li>
+<li>the method used for detection</li>
+<li>how the results differ between the two analyses</li>
+</ul></li>
+</ul>
+</section>
 <section id="outliers-and-artifacts-1" class="slide level2">
 <h2>Outliers and artifacts</h2>
 <p>What about the relationship between length and price?</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
-<span id="cb33-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb33-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
-<span id="cb33-4"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
+<span id="cb34-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb34-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
+<span id="cb34-4"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-38-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"><p>We have so many points that <em>overplotting</em> becomes an issue.</p>
+<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-39-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"><p>We have so many points that <em>overplotting</em> becomes an issue.</p>
 </section>
 <section id="overplotting" class="slide level2">
 <h2>Overplotting</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
-<span id="cb34-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb34-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
-<span id="cb34-4"><a href=""></a>  <span class="fu">geom_hex</span>(<span class="at">bins=</span><span class="dv">100</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() <span class="sc">+</span></span>
-<span id="cb34-5"><a href=""></a>  colorspace<span class="sc">::</span><span class="fu">scale_fill_binned_sequential</span>(<span class="at">palette =</span> <span class="st">"BurgYl"</span>, <span class="at">n.breaks=</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
+<span id="cb35-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb35-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
+<span id="cb35-4"><a href=""></a>  <span class="fu">geom_hex</span>(<span class="at">bins=</span><span class="dv">100</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>() <span class="sc">+</span></span>
+<span id="cb35-5"><a href=""></a>  colorspace<span class="sc">::</span><span class="fu">scale_fill_binned_sequential</span>(<span class="at">palette =</span> <span class="st">"BurgYl"</span>, <span class="at">n.breaks=</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1236,7 +1270,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-39-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-40-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1244,10 +1278,10 @@ What do you notice? What can be done?
 <h2>Overplotting</h2>
 <p>As an alternative, let’s reduce the point size</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
-<span id="cb35-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb35-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price, <span class="at">col=</span>cut)) <span class="sc">+</span> </span>
-<span id="cb35-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
+<span id="cb36-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb36-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price, <span class="at">col=</span>cut)) <span class="sc">+</span> </span>
+<span id="cb36-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1255,7 +1289,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-40-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-41-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1263,10 +1297,10 @@ What do you notice? What can be done?
 <h2>Overplotting</h2>
 <p>Let’s reduce the point size even more and add opacity:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
-<span id="cb36-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
-<span id="cb36-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
-<span id="cb36-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.01</span>, <span class="at">alpha=</span><span class="fl">0.2</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href=""></a>diamonds <span class="sc">%&gt;%</span> </span>
+<span id="cb37-2"><a href=""></a> <span class="fu">filter</span>(y <span class="sc">&lt;=</span> <span class="dv">30</span>, x <span class="sc">&gt;=</span> <span class="dv">3</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb37-3"><a href=""></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> price)) <span class="sc">+</span> </span>
+<span id="cb37-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">size=</span><span class="fl">0.01</span>, <span class="at">alpha=</span><span class="fl">0.2</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1274,7 +1308,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-41-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-42-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1282,7 +1316,7 @@ What do you notice? What can be done?
 <h2>Outliers and artifacts</h2>
 <p>Let’s look at just the diamond length:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>x)) <span class="sc">+</span> <span class="fu">geom_histogram</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>x)) <span class="sc">+</span> <span class="fu">geom_histogram</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1290,7 +1324,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-42-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-43-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1298,7 +1332,7 @@ What do you notice? What can be done?
 <h2>Outliers and artifacts</h2>
 <p>A smaller binwidth reveals more structure.</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>x)) <span class="sc">+</span> <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="fl">0.1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>x)) <span class="sc">+</span> <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="fl">0.1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1306,7 +1340,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-43-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-44-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1314,47 +1348,81 @@ What do you notice? What can be done?
 <h2>Outliers and artifacts</h2>
 <p>What about price?</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>price)) <span class="sc">+</span> </span>
-<span id="cb39-2"><a href=""></a>  <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="dv">100</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-
-</div>
-<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-44-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
-<section id="outliers-and-artifacts-5" class="slide level2">
-<h2>Outliers and artifacts</h2>
-<p>Zooming in:</p>
-<div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb40"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>price)) <span class="sc">+</span> </span>
-<span id="cb40-2"><a href=""></a>  <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="dv">25</span>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">2500</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb40-2"><a href=""></a>  <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="dv">100</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
 <img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-45-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
-<section id="outliers-and-artifacts-6" class="slide level2">
-<h2>Outliers and artifacts</h2>
+<section id="anomalies" class="slide level2">
+<h2>Anomalies</h2>
+<p>Zooming in, there are <em>no diamonds at all</em> priced at $1500?</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb41-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
-<span id="cb41-2"><a href=""></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>carat, <span class="at">y=</span>price), <span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> </span>
-<span id="cb41-3"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-
+<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb41-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>price)) <span class="sc">+</span> </span>
+<span id="cb41-2"><a href=""></a>  <span class="fu">geom_histogram</span>(<span class="at">binwidth=</span><span class="dv">25</span>) <span class="sc">+</span> <span class="fu">xlim</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">2500</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-46-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
-<section id="outliers-and-artifacts-7" class="slide level2">
+
+</section>
+<section id="anomalies-output" class="slide level2 output-location-slide"><h2>Anomalies</h2><div class="cell output-location-slide" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-46-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="anomalies-1" class="slide level2">
+<h2>Anomalies</h2>
+<p>Buried in a reddit thread:</p>
+<center>
+<img data-src="figures/diamonds1.png" style="width:70.0%">
+</center>
+<div class="fragment">
+<center>
+<img data-src="figures/diamonds2.png" style="width:70.0%">
+</center>
+</div>
+<div class="fragment">
+<p>Many plausible theories but the answer was a missed page while scraping. <strong>Occam’s razor:</strong> assume the simplest explanation (e.g a mistake in the data) before you investigate more complex explanations.</p>
+</div>
+</section>
+<section id="outliers-and-artifacts-5" class="slide level2">
 <h2>Outliers and artifacts</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>x, <span class="at">y=</span>carat))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
+<span id="cb42-2"><a href=""></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>carat, <span class="at">y=</span>price), <span class="at">size=</span><span class="fl">0.1</span>) <span class="sc">+</span> </span>
+<span id="cb42-3"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
 <img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-47-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
+<section id="outliers-and-artifacts-6" class="slide level2">
+<h2>Outliers and artifacts</h2>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href=""></a>diamonds <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>x, <span class="at">y=</span>carat))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+
+</div>
+<img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-48-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
+<section id="concepts-covered-in-the-diamonds-data" class="slide level2 smaller">
+<h2>Concepts covered in the diamonds data</h2>
+<ul>
+<li><p><strong>Outliers.</strong> <code>x = 0</code> is physically impossible.</p></li>
+<li><p><strong>Overplotting.</strong> With 50,000 observations a scatterplot turns into a solid blob. Hex bins, smaller points, and opacity each reveal different structure.</p></li>
+<li><p><strong>Resolution.</strong> The default histogram of length hid important structure. Making the binwidth smaller exposed clusters.</p></li>
+<li><p><strong>Artifacts and anomalies.</strong> The missing $1,500 diamonds are a property of how the data were collected (or weren’t collected!) not a property of diamonds themselves.</p></li>
+<li><p><strong>Clustering and hidden variables.</strong> Carat vs price falls into vertical bands. Buyers round up.</p></li>
+<li><p><strong>Occam’s razor.</strong> The simplest explanation is usually the best.</p></li>
+</ul>
+</section>
 <section id="billboard-data" class="slide level2">
 <h2>Billboard Data</h2>
 <p>Let’s return to the billboard dataset</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href=""></a>billboard_long <span class="ot">&lt;-</span> billboard <span class="sc">|&gt;</span> </span>
-<span id="cb43-2"><a href=""></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">starts_with</span>(<span class="st">"wk"</span>), </span>
-<span id="cb43-3"><a href=""></a>               <span class="at">names_to =</span> <span class="st">"week"</span>, </span>
-<span id="cb43-4"><a href=""></a>               <span class="at">names_prefix =</span> <span class="st">"wk"</span>, </span>
-<span id="cb43-5"><a href=""></a>               <span class="at">names_transform =</span> <span class="fu">list</span>(<span class="at">week =</span> as.integer), </span>
-<span id="cb43-6"><a href=""></a>               <span class="at">values_to =</span> <span class="st">"rank"</span>)</span>
-<span id="cb43-7"><a href=""></a>billboard_long</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href=""></a>billboard_long <span class="ot">&lt;-</span> billboard <span class="sc">|&gt;</span> </span>
+<span id="cb44-2"><a href=""></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">starts_with</span>(<span class="st">"wk"</span>), </span>
+<span id="cb44-3"><a href=""></a>               <span class="at">names_to =</span> <span class="st">"week"</span>, </span>
+<span id="cb44-4"><a href=""></a>               <span class="at">names_prefix =</span> <span class="st">"wk"</span>, </span>
+<span id="cb44-5"><a href=""></a>               <span class="at">names_transform =</span> <span class="fu">list</span>(<span class="at">week =</span> as.integer), </span>
+<span id="cb44-6"><a href=""></a>               <span class="at">values_to =</span> <span class="st">"rank"</span>)</span>
+<span id="cb44-7"><a href=""></a>billboard_long</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell fragment" data-layout-align="center">
 <div class="cell-output cell-output-stdout">
@@ -1379,11 +1447,11 @@ What do you notice? What can be done?
 <h2>Exploring song rank</h2>
 <p>Let’s plot the change in song rank for the songs by 3 artists by week:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb45"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb45-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb45-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Jay-Z"</span>, <span class="st">"Houston, Whitney"</span>, <span class="st">"Aguilera, Christina"</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb45-3"><a href=""></a>  <span class="fu">drop_na</span>() <span class="sc">|&gt;</span></span>
-<span id="cb45-4"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>week, <span class="at">y=</span>rank, <span class="at">col=</span>artist, <span class="at">group=</span>track)) <span class="sc">+</span></span>
-<span id="cb45-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb46-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Jay-Z"</span>, <span class="st">"Houston, Whitney"</span>, <span class="st">"Aguilera, Christina"</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb46-3"><a href=""></a>  <span class="fu">drop_na</span>() <span class="sc">|&gt;</span></span>
+<span id="cb46-4"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>week, <span class="at">y=</span>rank, <span class="at">col=</span>artist, <span class="at">group=</span>track)) <span class="sc">+</span></span>
+<span id="cb46-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 <p><br></p>
@@ -1392,7 +1460,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-49-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-50-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1400,12 +1468,12 @@ What do you notice? What can be done?
 <h2>Exploring song rank</h2>
 <p>Create a new column which is the actual date the song achieved that rank:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb46" data-code-line-numbers="4-5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb46-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Bruno Mars"</span>, <span class="st">"Creed"</span>, <span class="st">"Backstreet Boys, The"</span>, <span class="st">"Red Hot Chili Peppers"</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb46-3"><a href=""></a>  <span class="fu">drop_na</span>() <span class="sc">|&gt;</span></span>
-<span id="cb46-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">date =</span> date.entered <span class="sc">+</span> <span class="fu">weeks</span>(week)) <span class="sc">|&gt;</span></span>
-<span id="cb46-5"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>rank, <span class="at">col=</span>artist, <span class="at">group=</span>track)) <span class="sc">+</span></span>
-<span id="cb46-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb47" data-code-line-numbers="4-5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb47-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Bruno Mars"</span>, <span class="st">"Creed"</span>, <span class="st">"Backstreet Boys, The"</span>, <span class="st">"Red Hot Chili Peppers"</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb47-3"><a href=""></a>  <span class="fu">drop_na</span>() <span class="sc">|&gt;</span></span>
+<span id="cb47-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">date =</span> date.entered <span class="sc">+</span> <span class="fu">weeks</span>(week)) <span class="sc">|&gt;</span></span>
+<span id="cb47-5"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>rank, <span class="at">col=</span>artist, <span class="at">group=</span>track)) <span class="sc">+</span></span>
+<span id="cb47-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1413,7 +1481,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-50-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-51-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1421,23 +1489,65 @@ What do you notice? What can be done?
 <h2>Exploring Missingness</h2>
 <p>There is a lot of missingness. What patterns can we identify?</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb47"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb47-2"><a href=""></a>  <span class="fu">group_by</span>(week) <span class="sc">|&gt;</span> </span>
-<span id="cb47-3"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">frac_missing =</span> <span class="fu">mean</span>(<span class="fu">is.na</span>(rank))) <span class="sc">|&gt;</span> </span>
-<span id="cb47-4"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>week, <span class="at">y=</span>frac_missing)) <span class="sc">+</span> </span>
-<span id="cb47-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb48-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb48-2"><a href=""></a>  <span class="fu">group_by</span>(week) <span class="sc">|&gt;</span> </span>
+<span id="cb48-3"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">frac_missing =</span> <span class="fu">mean</span>(<span class="fu">is.na</span>(rank))) <span class="sc">|&gt;</span> </span>
+<span id="cb48-4"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>week, <span class="at">y=</span>frac_missing)) <span class="sc">+</span> </span>
+<span id="cb48-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
+<span id="cb48-6"><a href=""></a>  <span class="fu">xlab</span>(<span class="st">"Weeks since entering top 100"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Fraction missing"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
+<center>
+What does “fraction missing correspond to”?
+</center>
 </section>
 <section id="exploring-missingness-output" class="slide level2 output-location-slide"><h2>Exploring Missingness</h2><div class="cell output-location-slide" data-layout-align="center">
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-51-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-52-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
-</div></section><section id="comparing-data-across-groups" class="slide level2">
+</div></section><section id="exploring-missingness-1" class="slide level2">
+<h2>Exploring Missingness</h2>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
+<span id="cb49-2"><a href=""></a>  <span class="fu">group_by</span>(week) <span class="sc">|&gt;</span> </span>
+<span id="cb49-3"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">frac_missing =</span> <span class="fu">mean</span>(<span class="fu">is.na</span>(rank))) <span class="sc">|&gt;</span> </span>
+<span id="cb49-4"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>week, <span class="at">y=</span>frac_missing)) <span class="sc">+</span> </span>
+<span id="cb49-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
+<span id="cb49-6"><a href=""></a>  <span class="fu">xlab</span>(<span class="st">"Weeks on top 100"</span>) <span class="sc">+</span> <span class="fu">ylab</span>(<span class="st">"Percent of Songs"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+<center>
+What do you notice?
+</center>
+</section>
+<section id="exploring-missingness-1-output" class="slide level2 output-location-slide"><h2>Exploring Missingness</h2><div class="cell output-location-slide" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-53-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="the-recurrent-rule" class="slide level2">
+<h2>The Recurrent Rule</h2>
+<blockquote>
+<p>If a song has been on the Hot 100 chart for 20 weeks and is not currently inside the top 50 (or lacks strong upward momentum), Billboard automatically removes it from the chart, to prevent long-running hits from stagnating the rankings and blocking new entries.</p>
+</blockquote>
+</section>
+<section id="concepts-covered-in-the-billboard-data" class="slide level2 smaller">
+<h2>Concepts covered in the billboard data</h2>
+<ul>
+<li><p><strong>Tidying helps plotting.</strong> <code>wk1...wk76</code> are values of a variable, not 76 variables.</p></li>
+<li><p><strong>Color vs.&nbsp;grouping.</strong> Jay-Z has five songs and without the grouping they get drawn as one line. Set <code>col = artist</code> and <code>group = track</code> to see all of them.</p></li>
+<li><p><strong>Choices for the x-axis.</strong> Weeks-since-entering vs.&nbsp;calendar date answer different questions about the same data.</p></li>
+<li><p><strong>Missingness is data.</strong> The fraction of missing values at each week has meaning in the context of the Billboard chart.</p></li>
+</ul>
+</section>
+<section id="comparing-data-across-groups" class="slide level2">
 <h2>Comparing data across groups</h2>
 <p>What’s the best way to compare data across multiple groups?</p>
 <ul>
@@ -1455,11 +1565,11 @@ What do you notice? What can be done?
 <section id="planned-parenthood-services" class="slide level2">
 <h2>Planned parenthood services</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb48-1"><a href=""></a>cancer_plot <span class="ot">&lt;-</span> pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>cancerscreen)) <span class="sc">+</span> <span class="fu">theme_bw</span>() </span>
-<span id="cb48-2"><a href=""></a>abortion_plot <span class="ot">&lt;-</span> pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>abortions)) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span>
-<span id="cb48-3"><a href=""></a></span>
-<span id="cb48-4"><a href=""></a><span class="do">## Plot them side by side</span></span>
-<span id="cb48-5"><a href=""></a>cancer_plot <span class="sc">+</span> abortion_plot </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb50"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb50-1"><a href=""></a>cancer_plot <span class="ot">&lt;-</span> pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>cancerscreen)) <span class="sc">+</span> <span class="fu">theme_bw</span>() </span>
+<span id="cb50-2"><a href=""></a>abortion_plot <span class="ot">&lt;-</span> pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>abortions)) <span class="sc">+</span> <span class="fu">theme_bw</span>()</span>
+<span id="cb50-3"><a href=""></a></span>
+<span id="cb50-4"><a href=""></a><span class="do">## Plot them side by side</span></span>
+<span id="cb50-5"><a href=""></a>cancer_plot <span class="sc">+</span> abortion_plot </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 <!-- ::: notes -->
@@ -1469,18 +1579,18 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-53-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-55-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
 </div></section><section id="on-the-same-plot" class="slide level2">
 <h2>On the same plot</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href=""></a>pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
-<span id="cb49-2"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>cancerscreen), <span class="at">col=</span><span class="st">"blue"</span>) <span class="sc">+</span> </span>
-<span id="cb49-3"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>abortions), <span class="at">col=</span><span class="st">"red"</span>) <span class="sc">+</span> </span>
-<span id="cb49-4"><a href=""></a>  <span class="fu">ylab</span>(<span class="st">""</span>) <span class="sc">+</span></span>
-<span id="cb49-5"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb51"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb51-1"><a href=""></a>pp_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb51-2"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>cancerscreen), <span class="at">col=</span><span class="st">"blue"</span>) <span class="sc">+</span> </span>
+<span id="cb51-3"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>year, <span class="at">y=</span>abortions), <span class="at">col=</span><span class="st">"red"</span>) <span class="sc">+</span> </span>
+<span id="cb51-4"><a href=""></a>  <span class="fu">ylab</span>(<span class="st">""</span>) <span class="sc">+</span></span>
+<span id="cb51-5"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1488,7 +1598,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-54-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-56-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1496,10 +1606,10 @@ What do you notice? What can be done?
 <h2>Absolute vs relative levels</h2>
 <p>Absolute levels:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb50"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb50-1"><a href=""></a>pop <span class="sc">|&gt;</span> </span>
-<span id="cb50-2"><a href=""></a>  <span class="fu">filter</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Oman"</span>, <span class="st">"United States"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb50-3"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>Year, <span class="at">y=</span>Population, <span class="at">col=</span><span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>)) <span class="sc">+</span> </span>
-<span id="cb50-4"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href=""></a>pop <span class="sc">|&gt;</span> </span>
+<span id="cb52-2"><a href=""></a>  <span class="fu">filter</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Oman"</span>, <span class="st">"United States"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb52-3"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>Year, <span class="at">y=</span>Population, <span class="at">col=</span><span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>)) <span class="sc">+</span> </span>
+<span id="cb52-4"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1507,7 +1617,7 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-55-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-57-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1515,13 +1625,13 @@ What do you notice? What can be done?
 <h2>Absolute vs relative levels</h2>
 <p>Relative levels:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb51"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb51-1"><a href=""></a>pop <span class="sc">|&gt;</span> </span>
-<span id="cb51-2"><a href=""></a>  <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
-<span id="cb51-3"><a href=""></a>  <span class="fu">mutate</span>(<span class="st">`</span><span class="at">Relative Population Change</span><span class="st">`</span> <span class="ot">=</span> Population <span class="sc">/</span> <span class="fu">first</span>(Population[Year<span class="sc">==</span><span class="st">"1960-01-01"</span>])) <span class="sc">|&gt;</span></span>
-<span id="cb51-4"><a href=""></a>  <span class="fu">filter</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Oman"</span>, <span class="st">"United States"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb51-5"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>Year, <span class="at">y=</span><span class="st">`</span><span class="at">Relative Population Change</span><span class="st">`</span>, <span class="at">col=</span><span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>)) <span class="sc">+</span></span>
-<span id="cb51-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
-<span id="cb51-7"><a href=""></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks=</span><span class="dv">1</span><span class="sc">:</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb53-1"><a href=""></a>pop <span class="sc">|&gt;</span> </span>
+<span id="cb53-2"><a href=""></a>  <span class="fu">group_by</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>) <span class="sc">|&gt;</span></span>
+<span id="cb53-3"><a href=""></a>  <span class="fu">mutate</span>(<span class="st">`</span><span class="at">Relative Population Change</span><span class="st">`</span> <span class="ot">=</span> Population <span class="sc">/</span> <span class="fu">first</span>(Population[Year<span class="sc">==</span><span class="st">"1960-01-01"</span>])) <span class="sc">|&gt;</span></span>
+<span id="cb53-4"><a href=""></a>  <span class="fu">filter</span>(<span class="st">`</span><span class="at">Country Name</span><span class="st">`</span> <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Oman"</span>, <span class="st">"United States"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb53-5"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>Year, <span class="at">y=</span><span class="st">`</span><span class="at">Relative Population Change</span><span class="st">`</span>, <span class="at">col=</span><span class="st">`</span><span class="at">Country Name</span><span class="st">`</span>)) <span class="sc">+</span></span>
+<span id="cb53-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
+<span id="cb53-7"><a href=""></a>  <span class="fu">scale_y_continuous</span>(<span class="at">breaks=</span><span class="dv">1</span><span class="sc">:</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1529,35 +1639,72 @@ What do you notice? What can be done?
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-56-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
+<p><img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-58-1.png" class="quarto-figure quarto-figure-center" width="960"></p>
 </figure>
 </div>
 </div>
-</div></section><section id="workflow-tips-and-advice" class="slide level2 smaller">
-<h2>Workflow tips and advice</h2>
-<p>Developing graphics is an iterative trial-and-error process:</p>
+</div></section><section id="concepts-covered" class="slide level2 smaller">
+<h2>Concepts covered</h2>
 <ul>
-<li><strong>Hone in on an essential question or relationship.</strong>
-<ul>
-<li>This might require making a few crude plots to help you decide where to focus.</li>
-</ul></li>
-<li><strong>Start simple.</strong>
-<ul>
-<li>Begin with the most basic plot you can.</li>
-</ul></li>
-<li><strong>Add complexity as you go.</strong>
-<ul>
-<li>Decide what to add or change based on <em>your own questions</em> rather than an envisioned endpoint.</li>
-</ul></li>
-<li><strong>Change one thing at a time, and keep copies.</strong>
-<ul>
-<li>You might well need to backtrack.</li>
-</ul></li>
-<li><strong>Don’t be afraid of starting over.</strong>
-<ul>
-<li>If an idea doesn’t pan out, no harm done!</li>
-</ul></li>
+<li><p><strong>Absolute and relative answer different questions.</strong> Since 1960 Oman’s population grew 9-fold and the US grew 12-fold. But the US added 148 million people and Oman added 4.4 million.</p></li>
+<li><p><strong>Shared axes vs separate axes.</strong> The first plot has a shared y-axis, which makes it easy to compare absolute levels. The second plot has separate y-axes, which makes it easy to compare relative growth.</p></li>
+<li><p><strong>Normalizing requires a baseline.</strong> Results depend on choosing 1960. A different baseline year might tell a different story.</p></li>
 </ul>
+</section>
+<section id="workflow-tips-and-advice" class="slide level2 smaller">
+<h2>Workflow tips and advice</h2>
+<p>Developing a graphic is iterative trial and error. A reasonable loop:</p>
+<ul>
+<li><p><strong>Start with a question.</strong> e.g.&nbsp;“Does the gender gap shrink with income?”, not “let’s make a bar chart.”</p></li>
+<li><p><strong>Make the crudest version first.</strong> Default geom, default theme, no labels. You are only asking whether there is anything there at all.</p></li>
+<li><p><strong>Change one thing at a time.</strong></p></li>
+<li><p><strong>Ask new questions based on what you see in the plots.</strong> Most of what we saw today came from reacting to something we saw in a plot, not from a pre-specified plan.</p></li>
+</ul>
+</section>
+<section id="some-additional-tips" class="slide level2">
+<h2>Some additional tips</h2>
+<table class="caption-top">
+<colgroup>
+<col style="width: 41%">
+<col style="width: 58%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Things to try</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Solid blob of points</td>
+<td>smaller points, <code>alpha</code>, <code>geom_hex()</code></td>
+</tr>
+<tr class="even">
+<td>A few outlier points ruin the scale</td>
+<td>set a rule for removing and report what you dropped</td>
+</tr>
+<tr class="odd">
+<td>Distribution looks featureless</td>
+<td>change <code>binwidth</code>, zoom in</td>
+</tr>
+<tr class="even">
+<td>Too many lines or colors</td>
+<td>facet, or gray out everything but the ones you mean</td>
+</tr>
+<tr class="odd">
+<td>Groups on wildly different scales</td>
+<td>plot relative change instead of absolute</td>
+</tr>
+<tr class="even">
+<td>Two panels you can’t compare</td>
+<td>one shared axis instead of <code>patchwork</code></td>
+</tr>
+<tr class="odd">
+<td>Reader can’t find the point</td>
+<td>say it in the title and provide a label directly instead of a legend</td>
+</tr>
+</tbody>
+</table>
 <!-- ## -->
 <!-- The graphic indicates in particular that: -->
 <!-- - global population growth (total height of bar) is increasing linearly; -->
@@ -1579,41 +1726,6 @@ What do you notice? What can be done?
 <!--     - Did you add anything that doesn't really need to be there? -->
 <!-- - **Pleasant**. Visuals should be nice to look at! -->
 <!--     - Do you smile a little when you open up that plot? -->
-</section></section>
-<section>
-<section id="summary" class="title-slide slide level1 center">
-<h1>Summary</h1>
-<p>This has been a primer on visualization basics. We touched on the following points:</p>
-<ul>
-<li><p>The elements of statistical graphics are axes, geometric objects, aesthetics, and text</p></li>
-<li><p>Statistical graphics are constructed by mapping dataframe columns to geometric objects and aesthetics</p>
-<ul>
-<li>Allows for display of complex information</li>
-<li>Specified in Altair as marks and encodings on a chart</li>
-</ul></li>
-<li><p>The basic statistical graphics are histograms, boxplots, scatterplots, line plots, and barplots.</p>
-<ul>
-<li>Think of these as building blocks you can use to develop more sophisticated visualizations</li>
-</ul></li>
-<li><p>Effective data visualizations are novel, informative, efficient/economical, and pleasing.</p></li>
-<li><p>Developing visualizations is an iterative process</p>
-<ul>
-<li>Start simple, add complexity, and experiment!</li>
-</ul></li>
-</ul>
-<p>You will refine your understanding as you use these tools in context, and see many examples throughout the course.</p>
-</section>
-<section id="summary-1" class="slide level2">
-<h2>Summary</h2>
-<ul>
-<li>Make sure text and numbers are large enough!</li>
-<li>Avoid putting too much in a single plot</li>
-<li>Label axes and include units of measurements</li>
-<li>Scale axes appropriately</li>
-<li>Add a legend or caption to the plot explaining symbols or colors, etc</li>
-<li>Each plot should be self-explanatory without having to refer to the text</li>
-<li>Use ggplot2 + companion libraries</li>
-</ul>
 
 </section></section>
     </div>
