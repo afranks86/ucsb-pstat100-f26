@@ -1,0 +1,1421 @@
+---
+title: "Density estimation and smoothing"
+format: 
+    revealjs:
+        smaller: true
+        slide-number: true
+        scrollable: true
+execute:
+    echo: true
+---
+
+```{r}
+#| echo: false
+#| output: false
+library(tidyverse)
+library(KernSmooth)
+library(locfit)
+library(mclust)
+```
+
+```{r, echo=FALSE}
+library(tidyverse)
+
+air <- read_csv('data/air.csv')
+air <- air |> rename(all_of(c(PM25_98pct = "PM2.5...7",
+                              PM25_mean = "PM2.5...8",
+                              NO2_98pct = "NO2...3",
+                              NO2_mean = "NO2...4")))
+
+pmdata <- air |> select(PM25_mean, City, State, Year) |>
+  drop_na()
+```
+
+## Density estimation and smoothing
+
+* **Density estimation**
+    + Kernel density estimation (KDE)
+    + Non-Gaussian kernels
+    + Multivariate KDE
+    + Mixture models
+
+* **Smoothing**
+    + Kernel smoothing
+    + Bandwidth and kernel choice
+
+## Variation in one variable
+
+**Variation** in data is the _**tendency of values to change from measurement to measurement**_.
+
+For example, the following observations from your mini project data are around 8 $\mu g/m^3$, but each one is different.
+
+```{r}
+#| tags: []
+print(pmdata, n=10)
+```
+
+*What does it mean to ask what 'type' of variation there is in this data?*
+
+## Questions about variation
+
+There aren't exact types of variation, but here are some useful questions:
+
+* (**Common**) Which values are most common?
+
+* (**Rare**) Which values are rare?
+
+* (**Spread**) How spread out are the values and how are they spread out?
+
+* (**Skew**) Are extreme values present on one side more than the other?
+
+These questions often lead the way to more focused ones.
+
+## Air quality
+
+The following histogram shows the distribution of PM 2.5 concentrations across all 200 cities and 20 years.
+
+```{r}
+#| output-location: slide
+pmdata |> 
+  ggplot() + geom_histogram(aes(x=PM25_mean)) + 
+  theme_bw(base_size=16)
+```
+
+## Air quality
+
+It shows several statistical properties of the data related to variation:
+
+* The **common** values have the highest bars -- values between roughly 6 and 14.
+
+* Values under 4 and over 18 are **rare**, accounting for under 5% of the data.
+
+* Values are **concentrated** between 4 and 18, but are **spread** from 2 to 52.
+
+* The **shape** is pretty symmetric but a little more spread out to the right ("right skew").
+
+## Question refinement
+
+*New question:* The national standard is 12 micrograms per cubic meter. Over 1,000 measurements exceeded this. Was it just a few cities, or more widespread?
+
+```{r}
+#| echo: true
+#| output-location: slide
+
+nyears_over12 <- pmdata |> 
+  group_by(City, State) |> 
+  summarize(count = sum(PM25_mean > 12))
+
+nyears_over12 |> 
+  ggplot() + geom_histogram(aes(x=count), bins=15) + 
+  xlab("Number of years over 12ppm") + 
+  ylab("Number of cities") + 
+  theme_bw()
+
+```
+## Question refinement
+
+```{r, echo=TRUE}
+mean(nyears_over12$count > 0)
+```
+
+
+Many cities exceeded the standard at some point in time: over 70% of the cities in the dataset. So it was more widespread, but these were the worst:
+
+```{r}
+nyears_over12 |> arrange(desc(count))
+```
+
+## Further questions
+
+How many cities exceed the benchmark each year? Does this change from year to year?
+
+::: {.columns}
+
+::: {.column width=55%}
+```{r, echo=TRUE}
+pmdata |> 
+  ggplot(aes(x = PM25_mean, fill = factor(Year))) +
+  geom_histogram(position = "identity", 
+                alpha = 0.7,
+                bins = 30) +
+  scale_x_continuous(name = "Weighted annual average PM 2.5") +
+  scale_y_continuous(name = "count") +
+  labs(fill = "Year")
+```
+:::
+
+::: {.column width=40%}
+There are a lot of years and it's hard to see anything with all the overlapping bars.
+
+* Generally avoid stacking histograms.
+* Use density plots instead.
+:::
+
+:::
+
+## Further questions
+
+Visually, it's a lot easier to distinguish overlapping lines than overlapping bars. Smoothing out the histogram produces this:
+
+::: {.columns}
+
+::: {.column width=60%}
+```{r}
+pmdata |> ggplot(aes(x = PM25_mean, color = factor(Year))) +
+  geom_density(
+    adjust = 1.5,
+    alpha = 0.5,
+  ) +
+  xlab("Weighted annual average PM 2.5") +
+  xlim(c(0, 55)) +
+  ylab("Density") + theme_bw(base_size=16)
+```
+:::
+
+::: {.column width=40%}
+This shows that *both* the variation in PM 2.5 *and* the typical values are diminishing over time.
+
+* suggests fewer cities exceed the EPA standard (12 $\mu g/m^3$) over time
+* a few outliers in some early year
+* not the best presentation graphic, but useful exploratory graphic
+:::
+
+:::
+
+## Further questions
+
+```{r}
+library(colorspace)
+pmdata |> ggplot(aes(x = PM25_mean, color = Year, group=Year)) +
+  geom_density(
+    adjust = 1.5,
+    alpha = 0.5,
+  ) +
+  xlab("Weighted annual average PM 2.5") +
+  xlim(c(0, 25)) +
+  ylab("Density") + theme_bw(base_size=16) +
+  colorspace::scale_color_continuous_sequential(palette="Viridis")
+```
+
+## Further questions
+
+This might get the message across better:
+
+```{r}
+library(colorspace)
+pmdata |> 
+  mutate(Year = ymd(paste0(Year, "-01-01"))) |>
+  ggplot(aes(y = PM25_mean, x=Year)) +
+  ggdist::stat_dist_interval(.width=c(0.5, 0.75)) +
+  ylab("Weighted annual average PM 2.5") +
+  xlab("Year") + theme_bw(base_size=16) 
+```
+
+
+## Further questions {.smaller}
+
+::: {.columns}
+
+::: {.column width=50%}
+This is also effective.
+
+```{r}
+# First create the summarized data
+plot_data <- pmdata %>% 
+  filter(PM25_mean > 12) %>%
+  group_by(Year) %>%
+  summarise(`Number of Cities` = n()) %>%
+  ungroup()
+
+# Create the plot with both points and lines
+plot_data |> ggplot(aes(x = Year, y = `Number of Cities`)) +
+  geom_point() +  geom_line(alpha = 0.4) +  
+  labs(x = "Year", y = "Number of cities exceeding EPA standard") +
+  theme_bw(base_size=16)
+```
+:::
+
+::: {.column width=50%}
+And here are the outlying values with large PM25:
+
+```{r}
+pmdata |> filter(PM25_mean > 30)
+```
+:::
+
+:::
+
+## Density estimates
+
+All of the above has amounted to exploration of the distribution of PM 2.5 values across years and cities. 
+
+
+*Density estimates* provide smooth approximations of distributions:
+
+```{r}
+#| output-location: slide
+#| code-line-numbers: "4-5"
+library(ggplot2)
+
+# Create the plot with both line and filled density
+ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_density(alpha = 0.5, fill = "blue", col="black") +
+  scale_x_continuous(
+    name = "Weighted annual average PM 2.5",
+    limits = c(0, 55)  
+  ) +
+  scale_y_continuous(
+    name = "Density",
+    trans = "sqrt"
+  ) 
+```
+
+These are useful tools for answering questions about variation. Relative to the histogram:
+
+* Easier to see the shape, spread, and typical values quickly.
+* Easier to compare multiple distributions.
+
+## Histograms and probability densities
+
+From 120A, a probability density/mass function, $f(y)$, has two properties:
+
+1. Nonnegative: $f(y) \geq 0$ for every $y \in \mathbb{R}$.
+2. Sums/integrates to one: $\int_\mathbb{R} f(y) dy = 1$ or $\sum_{y \in \mathbb{R}} f(y) = 1$
+
+Histograms are *almost* proper density functions: they satisfy (1) but not (2). 
+
+## A preliminary: indicator functions
+
+In what follows we're going to express the histogram mathematically as a function of data values.
+
+This will require the use of **indicator functions**, which are simply _**functions that are 1 or 0 depending on a condition**_. They are denoted like this:
+
+$$
+\mathbf{1}\{\text{condition}\} = \begin{cases} 1 &\text{ if condition is true} \\ 0 &\text{ if condition is false} \end{cases}
+$$
+
+The sum of an indicator gives a count of how many times the condition is met:
+
+$$
+\sum_i \mathbf{1}\{y_i > 0\} = \#\text{ of values that are positive}
+$$
+
+## Count scale histograms
+
+When the bar height is a count of the number of observations in each bin, the histogram is on the **count scale**. 
+
+More precisely, if the values are $y_1, \dots, y_n$, then the height of the bar for the $j$th bin $B_j = (a_j, b_j]$ is:
+$$
+\text{height}_j = \sum_{i = 1}^n \mathbf{1}\{y_i \in B_j\}
+$$ 
+
+## Count scale histograms
+
+
+Bad for comparisons: the bar heights incomparable in scale whenever the bin widths and/or sample sizes differ.
+
+```{r}
+#| output-location: column
+library(ggplot2)
+library(patchwork)  # for combining plots
+
+# Create first histogram with 15 bins
+hist1 <- ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_histogram(
+    bins = 15, alpha = 0.4, 
+    fill = "orange", color = "black"
+  ) + labs(x = "Weighted annual average PM 2.5", y = "count") +
+  theme_bw(base_size=16)
+
+# Create second histogram with 50 bins
+hist2 <- ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_histogram(
+    bins = 50, alpha = 0.4,
+    fill = "blue",color = "black"
+  ) + labs(x = "Weighted annual average PM 2.5", y = "count") +
+  theme_bw(base_size=16) + ylim(c(0, 1600))
+
+# Combine the plots side by side
+hist1 + hist2
+```
+
+
+## Density scale histograms
+
+A fix that ensures comparability of scale for any two histograms is to  <font color='red'>normalize</font> heights by bin width $b$ and sample size $n$.
+
+$$
+\text{height}_j = \color{red}{\frac{1}{nb}} \sum_{i = 1}^n \mathbf{1}\{y_i \in B_j\} \quad\text{where}\quad b = b_j - a_j
+$$
+
+Now the area under the histogram is $\sum_j b \times \text{height}_j = 1$, so we call this a **density scale** histogram, because it is a valid probability density.
+
+## Density scale histograms
+
+```{r}
+#| output-location: column
+library(ggplot2)
+library(patchwork)  # for combining plots
+
+# Create first histogram with 15 bins
+hist1 <- ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_histogram(
+    aes(y = after_stat(density)),  # scale to density
+    bins = 15, alpha = 0.4, 
+    fill = "orange", color = "black"
+  ) + labs(x = "Weighted annual average PM 2.5", y = "density") +
+  theme_bw(base_size=16)
+
+# Create second histogram with 50 bins
+hist2 <- ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_histogram(
+    aes(y = after_stat(density)),  # scale to density
+    bins = 50, alpha = 0.4,
+    fill = "blue",color = "black"
+  ) + labs(x = "Weighted annual average PM 2.5", y = "density") +
+  theme_bw(base_size=16)
+
+# Combine the plots side by side
+hist1 + hist2
+```
+
+## Why not just use a histogram?
+
+A histogram makes you choose two things that are nowhere in the data:
+
+1. the **bin width** $b$
+2. where the bins **start**, the *bin origin*
+
+Both choices change what the picture. To see this, take just the 2018 PM 2.5 values:
+
+```{r}
+pm18 <- pmdata |> filter(Year == 2018) |> pull(PM25_mean)
+
+# density-scale histogram bar heights for a given bin width and origin
+hist_bars <- function(y, b, origin = 0) {
+  lo <- origin - b * ceiling((origin - min(y)) / b)
+  h  <- hist(y, breaks = seq(lo, max(y) + b, by = b), plot = FALSE)
+  tibble(mid = h$mids, density = h$counts / (sum(h$counts) * b), bw = b)
+}
+```
+
+## Shifting the bins changes the story
+
+Same data, same bin width ($b = 2.5$), only the *starting point* of the bins moves:
+
+```{r}
+#| output-location: slide
+b <- 2.5
+shifts <- c(0, 0.25, 0.5, 0.75) * b
+
+bars <- map_dfr(shifts, \(s) hist_bars(pm18, b, s) |>
+                  mutate(origin = sprintf("bins start at %.2f", s)))
+
+ggplot(bars, aes(x = mid, y = density)) +
+  geom_col(width = b, fill = "lightgray", color = "white") +
+  facet_wrap(~ origin, nrow = 1) +
+  coord_cartesian(xlim = c(0, 20)) +
+  labs(x = "PM 2.5 (2018)", y = "density") +
+  theme_bw(base_size = 13)
+```
+
+* In the first panel the bulk is a **broad plateau** of two comparable bars
+* In the last panel it is a **single sharp spike**
+* The apparent peak density runs from 0.19 to 0.27 -- a swing of nearly 40%
+
+Nothing about the data changed. Only an arbitrary choice did.
+
+## The bin width is arbitrary too
+
+```{r}
+#| output-location: slide
+widths <- c(0.25, 1, 2.5, 8)
+
+barsw <- map_dfr(widths, \(w) hist_bars(pm18, w)) |>
+  mutate(lab = factor(sprintf("bin width = %.2f", bw),
+                      levels = sprintf("bin width = %.2f", widths)))
+
+ggplot(barsw) +
+  geom_rect(aes(xmin = mid - bw/2, xmax = mid + bw/2, ymin = 0, ymax = density),
+            fill = "lightgray", color = "white") +
+  facet_wrap(~ lab, nrow = 1, scales = "free_y") +
+  coord_cartesian(xlim = c(0, 22)) +
+  labs(x = "PM 2.5 (2018)", y = "density") +
+  theme_bw(base_size = 13)
+```
+
+* **Too narrow:** each bin holds a handful of cities, so sampling noise reads as real structure
+* **Too wide:** the distribution is flattened into a few blocks and genuine features vanish
+
+## Other things histograms handle badly
+
+* **They discard where a point falls inside its bin.** Values of 7.01 and 8.99 are treated exactly like 7.99 and 8.01.
+
+* **The estimate is a step function.** Whatever we are estimating is usually smooth, so every jump is an artifact of the method rather than a feature of the data.
+
+* **They stack badly.** Comparing groups means overlapping bars that hide one another -- which is exactly why we switched to density curves for the by-year comparison earlier.
+
+## KDE removes the bin origin
+
+Overlaying a kernel density estimate on each of the four shifted histograms:
+
+```{r}
+#| output-location: slide
+ggplot(bars, aes(x = mid, y = density)) +
+  geom_col(width = b, fill = "lightgray", color = "white") +
+  geom_density(data = tibble(x = pm18), aes(x = x), inherit.aes = FALSE,
+               color = "red", linewidth = 1) +
+  facet_wrap(~ origin, nrow = 1) +
+  coord_cartesian(xlim = c(0, 20), ylim = c(0, 0.32)) +
+  labs(x = "PM 2.5 (2018)", y = "density") +
+  theme_bw(base_size = 13)
+```
+
+The red curve is **identical in all four panels**.
+
+* There are no bins, so there is no origin to choose
+* Every observation contributes a bump centered at *its own value* rather than at a bin
+* Still need to choose a "bandwidth" (the analogue of bin width)
+
+## Smoothing
+
+**Kernel density estimates** are _**local smoothings of the density scale histogram**_.
+
+This can be seen by comparing the type of smooth curve we saw earlier with the density scale histogram.
+
+```{r}
+#| output-location: slide
+library(ggplot2)
+
+# Calculate bin width and total observations for density calculation
+bin_width <- 2
+n_obs <- nrow(pmdata)
+
+# Create the combined plot
+ggplot(pmdata, aes(x = PM25_mean)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    binwidth = bin_width,
+    fill = "lightgray",
+    color = "white",
+    size = 0.1
+  ) +
+  geom_density(
+    adjust = 4,  
+    color = "black",
+    alpha = 0.5
+  ) +
+  xlab("Average long-term PM 2.5") + ylab("Density") + 
+  xlim(c(0, 55)) + ylim(c(0, 0.15)) +
+  scale_y_continuous(trans = "sqrt") +
+  theme_minimal() 
+```
+
+## How KDE works
+
+Technically, KDE is a convolution filtering. We can try to understand it in more intuitive terms by developing the idea constructively from the density histogram in two steps.
+
+1. Do locally adaptive binning
+2. Replace counting by weighted aggregation
+
+
+## A 'local' histogram
+
+One could do a 'moving window' binning by allowing the height at $\color{red}{x}$ to be a normalization of the count *in a neighborhood of $x$ of width $b$* rather than in one of a fixed set of bins:
+
+$$
+\text{hist}_\text{local}(\color{red}{x}) = \frac{1}{nb} \sum_{i = 1}^n \mathbf{1}\left\{|x_i - \color{red}{x}| < \frac{b}{2}\right\}
+$$
+
+Let's call this a **local histogram**, because the height at any point $\color{red}{x}$ is determined relative to the exact location of $\color{red}{x}$.
+
+![](figures/local-bins.png)
+
+## Demo
+
+$$
+\text{hist}_\text{local}(\color{red}{x}) = \frac{1}{nb} \sum_{i = 1}^n \mathbf{1}\left\{|x_i - \color{red}{x}| < \frac{b}{2}\right\}
+$$
+
+```{r, echo=FALSE}
+library(ggplot2)
+
+# Set random seed
+set.seed(42223)
+
+# Create the sample data
+samp <- data.frame(
+  x = runif(n = 5, min = 0, max = 10),
+  y = 0  # Adding constant y value
+)
+
+# Create the plot
+ggplot(samp, aes(x = x, y = y)) +
+  geom_point(color = "black", size = 5) +  # size in ggplot is roughly 1/10 of Altair size
+  scale_y_continuous(
+    name = "density",
+    limits = c(0, 0.6)
+  ) +
+  scale_x_continuous(
+    limits = c(0, 10)
+  ) +
+  theme_minimal() 
+```
+
+## PM 2.5 data
+
+Here's what that would look like with $b = 1$ for the air quality data:
+
+```{r}
+# output-location: slide
+
+# Create the grid and set bandwidth
+grid <- seq(0, 50, length.out = 1000)
+bw <- 1
+
+# Calculate density values - vectorized calculation for efficiency in R
+calculate_densities <- function(grid_points, data, bandwidth) {
+  clean_data <- data$PM25_mean[!is.na(data$PM25_mean)]
+  sapply(grid_points, function(g) {
+    sum(abs((g - clean_data)/(bandwidth/2)) < 1) / (bandwidth * 4280)
+  })
+}
+
+# Calculate densities
+dens <- calculate_densities(grid, pmdata, bw)
+
+# Create dataframe for plotting
+curve <- data.frame(x = grid, y = dens)
+
+# Create the plot with both area and line
+ggplot(curve, aes(x = x, y = y)) +
+  # Add filled area
+  geom_area(alpha = 0.5, fill = "skyblue") +
+  # Add line on top
+  geom_step(size = 0.5, color = "black") +
+  theme_bw(base_size=16)
+```
+
+## PM 2.5 data
+
+Zooming in reveals that this is still a step function:
+
+```{r}
+# Create the plot with both area and line
+ggplot(curve, aes(x = x, y = y)) +
+  # Add filled area
+  geom_rect(aes(xmin=x, xmax=lead(x), ymin=0, ymax=y), alpha = 0.5, fill = "skyblue") +
+  # Add line on top
+  geom_step(size = 0.5, color = "black") +
+  theme_minimal() + xlim(c(6, 15))
+```
+
+## The kernel function
+
+The local histogram is in fact a density estimate with a uniform 'kernel':
+$$
+\text{hist}_\text{local}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n \underbrace{\frac{1}{b}\mathbf{1}\left\{|x_i - \color{red}{x}| < \frac{b}{2}\right\}}_\text{kernel function}
+$$
+
+* uniform because the kernel function is constant about $x$
+* when $x_1, \dots, x_n$ are a random sample, this is an estimate of the population denisty 
+
+## Gaussian KDE
+
+Replacing the uniform kernel with a Gaussian kernel yields a smooth density estimate:
+$$
+\hat{f}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n \frac{1}{b}\varphi\left(\frac{x_i - \color{red}{x}}{b}\right)
+$$
+
+* $\varphi$ is the standard Gaussian density $\varphi(z) = \frac{1}{\sqrt{2\pi}}\exp\left\{- \frac{z^2}{2}\right\}$
+* $b$ is the smoothing 'bandwidth'
+
+In effect, the KDE curve at any point $\color{red}{x}$ is a weighted aggregation of *all* the data with weights proportional to their distance from $\color{red}{x}$.
+
+## Smoothing bandwidth
+
+The bandwidth parameter $b$ controls how wiggly the KDE curve is.
+
+```{r, echo=FALSE}
+#| output-location: slide
+
+# Create base histogram
+create_hist_with_density <- function(data, bw, title) {
+  ggplot(na.omit(data), aes(x = PM25_mean)) +
+    # Add histogram
+    geom_histogram(
+      aes(y = after_stat(density)),  # scale to density
+      bins = 30,
+      fill = "lightgray",
+      color = "white"
+    ) +
+    geom_density(
+      bw = bw,
+      color = "black"
+    ) +
+    labs(
+      x = "Average long-term PM 2.5",
+      y = "Density",
+      title = title
+    ) +
+    xlim(c(0, 55)) +
+    theme_bw(base_size=16)
+}
+
+# Create both plots
+plot_high_bw <- create_hist_with_density(pmdata, 3, "b = 3")
+plot_low_bw <- create_hist_with_density(pmdata, 0.5, "b = 0.5")
+
+# Combine plots side by side
+plot_high_bw | plot_low_bw
+```
+
+The choice of smoothing bandwidth can change the visual impression.
+
+* too much smoothing can obscure outliers and multiple modes
+* too little smoothing can misleadingly overemphasize sample artefacts
+
+## Other kernels
+
+In general, a KDE can be computed with any appropriately normalized nonnegative kernel function $K_b(\cdot)$.
+
+$$
+\hat{f}_{K_b}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n K_b\left(x_i - \color{red}{x}\right)
+$$
+
+Other common kernel functions include:
+
+* triangular kernel $K(z) = 1 - |z|$
+* parabolic kernel $K(z) \propto 1 - z^2$
+* cosine kernel $K(z) \propto \cos\left(\frac{\pi z}{2}\right)$
+* circular density $K(z) \propto \exp\left\{k\cos(z)\right\}$
+* any symmetric continuous probability density function
+
+
+## Sustainability data
+
+We'll work with sustainability index data for US cities to explore density estimation further.
+
+```{r}
+sust <- read_csv('data/sustainability.csv')
+sust 
+```
+
+* 933 distinct cities 
+* indices for sustainability in enviornmental, social, and eonomic domains
+
+## Environmental sustainability index
+
+Let's use the environmental sustainability index (`Env_Domain`) initially. The distribution of environmental sustainability across cities is shown below.
+
+```{r}
+# Create histogram with density estimate
+ggplot(sust, aes(x = Env_Domain)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.02) +
+  geom_density(color = "black") +
+  theme_minimal() +
+  labs(x = "Environmental sustainability index", y = "Density")
+```
+
+## KDE bandwidth selection
+
+A common choice for Gaussian KDE bandwidth is Scott's rule: 
+
+$$
+b = 1.06 \times \hat \sigma \times n^{-1/5}
+$$
+
+```{r}
+n <- length(sust$Env_Domain)
+h <- 1.06 * sd(sust$Env_Domain) * n^(-1/5)
+
+# Assuming 'sust' is your dataframe and 'Env_Domain' is your column
+ggplot(sust, aes(x = Env_Domain)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 alpha = 0.5,
+                 bins = 30) +
+  geom_density(bw = h,
+               color = "black") +
+  labs(x = "Environmental sustainability index",
+       y = "Density") +
+  theme_bw(base_size=16)
+```
+
+## Other Kernels
+
+`geom_density` plots a smooth density based on itself calling the `density` function in R.
+
+```{r}
+set.seed(5309)
+
+sigma_hat <- sd(sust$Env_Domain)
+
+sust_sub <- sust |> sample_frac(0.05)
+n <- nrow(sust_sub)
+bw_scott <- 1.06 * sigma_hat * n^(-1/5)
+# Assuming 'sust' is your dataframe and 'Env_Domain' is your column
+plot_density <- function(kernel = "gaussian", bw=bw_scott) {
+  
+  sust_sub |>
+  ggplot(aes(x = Env_Domain)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 alpha = 0.5,
+                 bins = 30) +
+  geom_density(color = "black",
+               bw = bw,
+               kernel = kernel) +
+  labs(x = "",
+       y = "") +
+  theme_bw(base_size=16) + ggtitle(kernel)
+}
+
+```
+
+## 
+
+```{r}
+(plot_density("gaussian") + plot_density("rectangular", bw=0.01)) /
+(plot_density("epanechnikov") + plot_density("triangular"))
+```
+## 
+
+```{r}
+sust_sub |>
+  ggplot(aes(x = Env_Domain)) +
+  geom_density(color = "black",
+               bw = bw_scott,
+               kernel = "gaussian") +
+  geom_density(color = "red",
+               bw = bw_scott,
+               kernel = "epanechnikov") +
+  geom_density(color = "blue",
+               bw = bw_scott,
+               kernel = "triangular") +
+  labs(x = "",
+       y = "") +
+  theme_bw(base_size=16)
+
+```
+
+## 2D Histograms
+
+
+
+## Overplotting revisited
+
+Now let's estimate the joint distribution of environmental and economic sustainability indices. Here are the values:
+
+```{r}
+# Plot multivariate data
+ggplot(sust, aes(x = Env_Domain, y = Econ_Domain)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Environmental sustainability", y = "Economic sustainability")
+```
+
+## 2D Histograms
+```{r}
+# Create 2D histogram
+ggplot(sust, aes(x = Env_Domain, y = Econ_Domain)) +
+  geom_bin2d(bins = 40) +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(x = "Environmental sustainability", y = "Economic sustainability")
+```
+
+## 2D Histograms
+
+```{r}
+# Create 2D histogram
+ggplot(sust, aes(x = Env_Domain, y = Econ_Domain)) +
+  geom_hex(bins = 40) +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(x = "Environmental sustainability", y = "Economic sustainability")
+```
+
+## KDE in higher 
+
+KDE can be generalized to estimating joint densities in $p$ dimensions:
+
+$$
+\hat{f}_K (\mathbf{x}) = \frac{1}{n} \sum_i |\mathbf{B}|^{-1/2} K \left(\mathbf{B^{-1/2}}(\mathbf{x} - \mathbf{x}_i)\right)
+$$
+
+* $\mathbf{x}\in\mathbb{R}^p$ is a $p$-dimensional vector
+* $K:\mathbb{R}^p \rightarrow \mathbb{R}$ is a nonnegative kernel function
+* $B$ is a $p\times p$ matrix of bandwidth parameters
+
+The usual approach is to decorrelate the variates and apply a product kernel $K(\mathbf{z}) = K_1(z_1)K_2(z_2)\cdots K_p(z_p)$ with separate bandwidths for each dimension.
+
+## Bivariate example
+
+::: {layout-ncol=2}
+![Bivariate histogram shown as a raster plot](figures/bivariate-hist.svg)
+
+![Contours of density estimate](figures/bivariate-kde.svg)
+
+:::
+
+Does race time seem correlated with runner's age?
+
+## Multivariate KDE
+
+```{r, echo=TRUE}
+library(MASS)
+#| output-location: slide
+
+# Multivariate KDE
+# Create prediction grid
+x1 <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
+x2 <- seq(min(sust$Econ_Domain), max(sust$Econ_Domain), length.out = 100)
+grid <- expand.grid(env = x1, econ = x2)
+
+# Compute 2D KDE
+kde2d_result <- kde2d(sust$Env_Domain, sust$Econ_Domain, n = 100)
+
+# Convert to data frame for plotting
+kde_df <- expand.grid(x = kde2d_result$x, y = kde2d_result$y)
+kde_df$z <- as.vector(kde2d_result$z)
+
+# Plot 2D KDE
+ggplot(kde_df, aes(x = x, y = y, fill = z)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(x = "Environmental sustainability", y = "Economic sustadinability")
+
+
+```
+
+## `geom_density_2d`
+
+`geom_density_2d` calls `kde2d` and automates this process.
+
+```{r, echo=TRUE}
+sust |> ggplot() + geom_density_2d_filled(aes(x=Env_Domain, y=Econ_Domain))
+```
+
+## `geom_density_2d`
+
+- Can use `adjust` argument to reduces smoothness
+- Adjust sets the bandwidth relative to the default (scotts rule)
+- Not, the `level` is proportional to the density but can't easily be interpreted as probabilities!
+
+```{r, echo=TRUE}
+sust |> ggplot() + geom_density_2d_filled(aes(x=Env_Domain, y=Econ_Domain), adjust=1/2)
+```
+## `geom_hdr`
+
+- The `ggdensity` packages has a geom called `geom_hdr` also uses `kde2d`. 
+
+- I prefer this because it leads to direct probability interprations
+
+```{r}
+library(ggdensity)
+sust |> ggplot(aes(x=Env_Domain, y=Econ_Domain)) + 
+  geom_hdr(method = method_kde(adjust = 1.5)) + 
+  theme_bw()
+```
+
+
+## Sustainability data, revisited
+```{r}
+ggplot() +
+  geom_point(data = sust, aes(x = Econ_Domain, y = Env_Domain), alpha = 0.5, size=1/2) +
+  theme_minimal()
+```
+
+
+<!-- ## Mixture models
+
+KDE is a *nonparametric* technique: no population parameters are specified.
+
+Mixture models are a parametric alternative for density estimation. The Gaussian mixture model is: 
+$$
+f(x) = a_1 \varphi(x; \mu_1, \sigma_1) + \cdots + a_n \varphi(x; \mu_n, \sigma_n)
+$$
+
+* $f(x)$ is the distribution of interest
+* $\varphi(\cdot; \mu, \sigma)$ denotes a Gaussian density with mean $\mu$ and standard deviation $\sigma$
+* the model has $n$ components
+* $a_1, \dots, a_n$ are the mixing parameters 
+* fitted using the EM algorithm
+
+## Bivariate mixture model
+
+Let's fit a mixture to the joint distribution of environmental and economic sustainability indices:
+```{r}
+# Fit Gaussian Mixture Model
+gmm_fit <- Mclust(sust[, c("Env_Domain", "Econ_Domain")], 
+                  G = 2, modelNames = "VVV") # Number of clusters
+```
+
+We can inspect the estimated components' centers (means):
+
+```{r}
+# Extract centers
+centers <- gmm_fit$parameters$mean
+centers
+```
+
+And the mixing parameters:
+
+```{r}
+mixing_params <- gmm_fit$parameters$pro
+mixing_params
+```
+
+## Bivariate mixture model
+
+```{r}
+library(mvtnorm)
+# Calculate GMM density
+# Create grid for contour plotting
+
+x_grid <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
+y_grid <- seq(min(sust$Econ_Domain), max(sust$Econ_Domain), length.out = 100)
+grid_points <- expand.grid(x = x_grid, y = y_grid)
+
+l1 <- gmm_fit$parameters$variance$cholsigma[, , 1]
+l2 <- gmm_fit$parameters$variance$cholsigma[,, 2]
+sigma1 <- l1 %*% t(l1)
+sigma2 <- l2 %*% t(l2)
+
+component1_fn <- function(x) dmvnorm(x, mean = centers[, 1], 
+                                   sigma = sigma1)
+component2_fn <- function(x) dmvnorm(x, mean = centers[, 2],
+                                   sigma = sigma2)
+
+# Combined density function
+density_fn <- function(x) {
+ mixing_params[1] * component1_fn(x) + mixing_params[2] * component2_fn(x)
+}
+
+z <- density_fn(grid_points)
+```
+
+## Bivariate mixture model
+
+```{r}
+#| output-location: slide
+ggplot() +
+  # Add contours
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
+                             z=mixing_params[1]*component1_fn(grid_points)),
+               aes(x = x, y = y, z = z)) +
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
+                             z=mixing_params[1]*component2_fn(grid_points)),
+               aes(x = x, y = y, z = z)) +
+  # Add original data points
+  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
+  theme_minimal()
+```
+
+## Bivariate mixture model
+```{r}
+#| output-location: slide
+# Create the plot
+ggplot() +
+  # Add contours
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, z=z),
+               aes(x = x, y = y, z = z)) +
+  # Add original data points
+  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
+  theme_minimal()
+
+
+  
+
+```
+## Pros and Cons
+
+KDE is a nonparametric method and is sometimes called a *memory-based* procedure: it uses all available data every time an estimated value is calculated.
+
+* Advantages: minimal assumptions, highly flexible
+* Disadvantages: not parsimonious, computationally intensive
+
+GMM's are *parametric* models.
+
+* Advantages: closed-form structure, good for multimodal distributions, various kinds of inference and prediction are possible
+* Disadvantages: estimation is less straightforward, may over-smooth, possible identifiability issues
+
+## GMMs for capturing subpopulations
+
+The GMM is especially useful if there are latent subpopulations in the data. Recall the simulated population of hawks:
+
+```{r}
+# Hawks example
+# Simulate data
+set.seed(40721)
+female_hawks <- tibble(
+  length = rnorm(3000, mean = 57.5, sd = 3),
+  sex = "female"
+)
+male_hawks <- tibble(
+  length = rnorm(2000, mean = 50.5, sd = 3),
+  sex = "male"
+)
+population_hawks <- bind_rows(female_hawks, male_hawks)
+```
+
+. . .
+
+Let's imagine we have a sample but without recorded sexes.
+
+```{r}
+# Sample without sex information
+set.seed(50223)
+samp <- population_hawks %>%
+  sample_n(500) %>%
+  dplyr::select(-sex)
+
+
+```
+
+## Hawks
+
+The histogram is not obviously bimodal, but we can suppose we're aware of the sex differences in length and just don't have that information.
+
+```{r}
+ggplot(samp, aes(x = length)) +
+ geom_histogram(aes(y = after_stat(density)), 
+               binwidth = 2,
+               size = 20) + 
+  theme_bw(base_size=16)
+```
+
+## Recovering subpopulations
+
+If we fit a mixture model with two components, amazingly, the mixture components accurately recover the distributions for each sex, even though this was a latent (unobserved) variable:
+
+```{r}
+gmm_hawks <- Mclust(samp$length, G = 2)
+```
+```{r, echo=FALSE}
+# Compare components with subpopulations
+cat("gmm component means:", gmm_hawks$parameters$mean, "\n")
+cat("true population means by sex:", sort(tapply(population_hawks$length, population_hawks$sex, mean)), "\n")
+cat("------------------------------------------------\n")
+cat("gmm component variances:", gmm_hawks$parameters$variance$sigmasq, "\n") 
+cat("population variances by sex:", sort(tapply(population_hawks$length, population_hawks$sex, var)), "\n")
+```
+
+Note that the means and variances are estimated from the sample but compared with the population values above.
+
+## GMM density estimate
+
+Further, the density estimate fits reasonably well:
+
+```{r}
+#| output-location: slide
+x <- seq(min(samp$length), max(samp$length), length.out = 100)
+# Define component density functions
+p1 <- gmm_hawks$parameters$pro[1]
+p2 <- 1-p1
+
+component1_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[1], 
+                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[1]))
+component2_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[2], 
+                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[2]))
+
+# Combined density function
+density_fn <- function(x) {
+ p1 * component1_fn(x) + p2 * component2_fn(x)
+}
+
+samp |> ggplot() + 
+  geom_histogram(aes(x=length, 
+                     y = after_stat(density)),
+                 bins=30,
+                 alpha=0.5) +
+  stat_function(fun = density_fn, col="dark green", size=1.2) + 
+  stat_function(fun = \(x) p1*component1_fn(x), size=1.2, col="red") +
+  stat_function(fun = \(x) p2*component2_fn(x), size=1.2, col="blue") +
+  xlim(c(40, 75)) + theme_minimal()
+```
+-->
+
+## Kernel smoothing
+
+Kernel smoothing is a technique similar to KDE used to visualize and estimate *relationships* (rather than distributions). 
+
+We'll use the GDP and life expectancy data to illustrate.
+
+```{r}
+#| output-location: slide
+# Life expectancy data
+life <- read_csv('data/life-gdp.csv') |>
+  filter(Year == 2000) |>
+  dplyr::select(`Country Name`, All, `GDP per capita`) %>%
+  mutate(log_gdp = log(`GDP per capita`),
+         life_exp = All) %>%
+  dplyr::select(country = `Country Name`, log_gdp, life_exp)
+
+# Kernel smoothing
+ksmooth_fit <- ksmooth(life$log_gdp, life$life_exp, 
+                      kernel = "normal", 
+                      bandwidth = 1)
+
+life |> ggplot() + geom_point(aes(x=log_gdp, y=life_exp)) + 
+  geom_line(aes(x=x, y=y), data=as_tibble(ksmooth_fit), col="red", size=1.2) + 
+  theme_bw(base_size=16)
+```
+
+## The method
+
+The technique consists in estimating trend by local weighted averaging; a kernel function is used to determine the exact weights.
+
+$$
+\hat{y}(x) = \frac{\sum_i K_b (x_i - x) y_i}{\sum_i K_b(x_i - x)}
+$$
+
+![](figures/kernel-smoothing-1.PNG){width=800}
+
+Notice that the kernel smooth trails off a bit near the boundary -- this is because fewer points are being averaged once the smoothing window begins to extend beyond the range of the data.
+
+## Smoothing bandwidth
+
+As with KDE, the bandwidth controls how wiggly the smooth is.
+
+```{r}
+#| output-location: slide
+bandwidths <- c(0.25, 1, 4)
+
+ks_bw <- purrr::map(bandwidths, \(b)
+  ksmooth(life$log_gdp, life$life_exp, kernel = "normal", bandwidth = b) |>
+    as_tibble() |>
+    mutate(bandwidth = factor(b))) |>
+  list_rbind()
+
+life |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point(alpha = 0.4) +
+  geom_line(aes(x = x, y = y, color = bandwidth), data = ks_bw, linewidth = 1.2) +
+  theme_bw(base_size = 16)
+```
+
+* too little smoothing chases noise from individual countries
+* too much smoothing flattens the trend and makes the boundary bias worse
+* `ksmooth` scales its kernels so their quartiles sit at $\pm$ `bandwidth`/4; for `kernel = "normal"` the standard deviation is about $0.37 \times$ `bandwidth`
+
+## Choice of kernel
+
+`ksmooth` offers two kernels: `"box"` (uniform) and `"normal"` (Gaussian).
+
+```{r}
+#| output-location: slide
+ks_kernels <- purrr::map(c("box", "normal"), \(k)
+  ksmooth(life$log_gdp, life$life_exp, kernel = k, bandwidth = 1) |>
+    as_tibble() |>
+    mutate(kernel = k)) |>
+  list_rbind()
+
+life |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point(alpha = 0.4) +
+  geom_line(aes(x = x, y = y, color = kernel), data = ks_kernels, linewidth = 1.2) +
+  theme_bw(base_size = 16)
+```
+
+As with KDE, the bandwidth matters much more than the kernel. The box kernel gives a slightly rougher curve because each point enters or leaves the window abruptly.
+
+## Kernel smoothing with `geom_smooth`
+
+`geom_smooth` has no built-in kernel smoother, but its `method` argument accepts any function that returns a fitted model with a `predict` method. A short wrapper around `ksmooth` is enough:
+
+```{r}
+ksmooth_method <- function(formula, data, kernel = "normal", bandwidth = 1, ...) {
+  structure(list(x = data$x, y = data$y, kernel = kernel, bandwidth = bandwidth),
+            class = "ksmooth_method")
+}
+
+predict.ksmooth_method <- function(object, newdata, ...) {
+  ksmooth(object$x, object$y, kernel = object$kernel,
+          bandwidth = object$bandwidth, x.points = newdata$x)$y
+}
+```
+
+## Kernel smoothing with `geom_smooth`
+
+Pass the wrapper as `method`, and the kernel and bandwidth through `method.args`:
+
+```{r}
+#| message: false
+life |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point() +
+  geom_smooth(method = ksmooth_method,
+              method.args = list(kernel = "normal", bandwidth = 1),
+              se = FALSE, color = "red", linewidth = 1.2) +
+  theme_bw(base_size = 16)
+```
+
+This is the same curve we computed with `ksmooth` at the start of this section. Keep `se = FALSE`, since the wrapper doesn't compute standard errors.
+
+## Gaps in the data
+
+What happens when part of the range has no data? Here we drop the middle-income countries:
+
+```{r}
+#| message: false
+life2 <- life |> filter(log_gdp > 8.5 | log_gdp < 7)
+
+life2 |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point() +
+  geom_smooth(method = ksmooth_method,
+              method.args = list(kernel = "normal", bandwidth = 1),
+              se = FALSE, color = "red", linewidth = 1.2) +
+  theme_bw(base_size = 16)
+```
+
+Inside the gap, the smooth is a weighted average of the nearest points on either side, so it draws a smooth curve where there are no observations at all.
+
+## Example: Wavy Turban's at the beach
+
+<center>![](figures/wavy_turban.png)</center>
+
+## Example: Wavy Turban's at the beach
+```{r}
+wt <- read_csv('data/wavy_turban_data.csv')
+
+wt
+```
+
+## Spatial Map of Wavy Turbans
+```{r}
+#| output-location: slide
+library(maps)
+
+california <- map_data("state") %>%
+  subset(region == "california")
+
+ggplot() +
+  geom_polygon(data = california, 
+               aes(x = long, y = lat, group = group),
+               fill = "white", 
+               color = "black") +
+  geom_point(data = wt |> filter(longitude < -115 & longitude > -125,
+                               latitude < 45 & latitude > 32.5,
+                               observed_on >= "2015-01-01"),
+             aes(x = longitude, y = latitude),
+             col = "red",
+             size = 0.5,
+             alpha = 0.6,
+             bins=100) +
+  # Set the coordinate system
+  coord_map() +
+  # Customize the theme
+  theme_minimal() +
+  # Add labels
+  labs(title = "Wavy Turban Observations",
+       x = "Longitude",
+       y = "Latitude") +
+  coord_cartesian(ylim=c(32.5, 36))
+```
+
+## Counts by month and year
+```{r}
+count_data <- wt |> mutate(date = ymd(observed_on), 
+             month = month(date), 
+             year = year(date)) |> 
+  group_by(month, year) |> 
+  summarize(count = n()) |> 
+  mutate(date = ymd(paste(year, month, "1", sep="-"))) |> 
+  arrange(date) |> filter(year > 2015)
+print(count_data, n=10)
+```
+
+
+
+## Wavy Turban counts on iNaturalist
+
+```{r}
+count_data |>
+  ggplot(aes(x=date, y=count)) + 
+  geom_line() + theme_bw(base_size=16)
+```
+
+## Smoothing Wavy Turban Counts
+
+
+```{r}
+# dates are stored as days, so a bandwidth of 730 is about two years
+predictions <- ksmooth(as.numeric(count_data$date), count_data$count,
+                       kernel = "normal", bandwidth = 730,
+                       x.points = as.numeric(count_data$date))$y
+
+count_data$preds <- predictions
+
+count_data |>
+  ggplot(aes(x=date, y=count)) + 
+  geom_line() + 
+  geom_line(aes(y=preds), col="red", size=1.2) + theme_bw(base_size=16) 
+```
+## Residuals
+
+```{r}
+count_data$residual <- count_data$count - count_data$preds
+
+count_data |>
+  ggplot(aes(x=date, y=residual)) + 
+  geom_line() + 
+  theme_bw(base_size=16)
+```
+
+## Percent Change
+
+```{r}
+count_data$pct_change <- 100 * (count_data$count / count_data$preds) - 100
+
+count_data |>
+  ggplot(aes(x=date, y=pct_change)) + 
+  geom_line() + 
+  geom_hline(yintercept=0, linetype="dashed") +
+  theme_bw(base_size=16)
+```
+## Median Percent Change by Month
+```{r}
+count_data |> group_by(month) |>
+  summarize(pct_change = median(pct_change)) |>
+  ggplot() + geom_line(aes(x=month, y=pct_change)) + 
+  theme_bw(base_size=16) + 
+  geom_hline(yintercept=0, linetype="dashed")
+```
+
+## Percent Change by Month
+
+```{r}
+count_data |> 
+  ggplot() + 
+  ggdist::stat_dist_interval(aes(x=month, y=pct_change)) +
+  theme_bw(base_size=16) + 
+  geom_hline(yintercept=0, linetype="dashed")
+```
+## Median Percent Change by Month 
+
+```{r}
+#| message: false
+count_data |> ggplot(aes(x=month, y=pct_change)) +
+  geom_point() +
+  geom_smooth(method = ksmooth_method, method.args = list(bandwidth = 3),
+              se = FALSE, col = "blue") + theme_bw(base_size=16)
+```
+
+
+## Median Percent Change by Month 
+
+Smooth again!
+
+```{r}
+#| message: false
+count_data |> ggplot(aes(x=month, y=pct_change)) +
+  geom_smooth(method = ksmooth_method, method.args = list(bandwidth = 3),
+              se = FALSE, col = "blue") + theme_bw(base_size=16) +
+  geom_point(aes(x=month, y=mean_pct_change), count_data |> group_by(month) |> summarize(mean_pct_change = mean(pct_change))) +
+  geom_hline(yintercept = 0, linetype="dashed")
+```
+
+
+
+
+
+
+
