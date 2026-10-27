@@ -5,6 +5,7 @@ format:
         smaller: true
         slide-number: true
         scrollable: true
+        html-math-method: katex
 execute:
     echo: true
 ---
@@ -41,7 +42,11 @@ pmdata <- air |> select(PM25_mean, City, State, Year) |>
 
 * **Smoothing**
     + Kernel smoothing
-    + Bandwidth and kernel choice
+    + Choice of kernel
+
+* **Choosing the bandwidth**
+    + Bias–variance tradeoff
+    + Cross-validation
 
 ## Variation in one variable
 
@@ -408,8 +413,11 @@ Same data, same bin width ($b = 2.5$), only the *starting point* of the bins mov
 b <- 2.5
 shifts <- c(0, 0.25, 0.5, 0.75) * b
 
-bars <- map_dfr(shifts, \(s) hist_bars(pm18, b, s) |>
-                  mutate(origin = sprintf("bins start at %.2f", s)))
+bars <- tibble()
+for (s in shifts) {
+  bars_s <- hist_bars(pm18, b, s) |> mutate(origin = sprintf("bins start at %.2f", s))
+  bars <- bind_rows(bars, bars_s)
+}
 
 ggplot(bars, aes(x = mid, y = density)) +
   geom_col(width = b, fill = "lightgray", color = "white") +
@@ -431,7 +439,11 @@ Nothing about the data changed. Only an arbitrary choice did.
 #| output-location: slide
 widths <- c(0.25, 1, 2.5, 8)
 
-barsw <- map_dfr(widths, \(w) hist_bars(pm18, w)) |>
+barsw <- tibble()
+for (w in widths) {
+  barsw <- bind_rows(barsw, hist_bars(pm18, w))
+}
+barsw <- barsw |>
   mutate(lab = factor(sprintf("bin width = %.2f", bw),
                       levels = sprintf("bin width = %.2f", widths)))
 
@@ -533,34 +545,7 @@ Let's call this a **local histogram**, because the height at any point $\color{r
 
 ## Demo
 
-$$
-\text{hist}_\text{local}(\color{red}{x}) = \frac{1}{nb} \sum_{i = 1}^n \mathbf{1}\left\{|x_i - \color{red}{x}| < \frac{b}{2}\right\}
-$$
-
-```{r, echo=FALSE}
-library(ggplot2)
-
-# Set random seed
-set.seed(42223)
-
-# Create the sample data
-samp <- data.frame(
-  x = runif(n = 5, min = 0, max = 10),
-  y = 0  # Adding constant y value
-)
-
-# Create the plot
-ggplot(samp, aes(x = x, y = y)) +
-  geom_point(color = "black", size = 5) +  # size in ggplot is roughly 1/10 of Altair size
-  scale_y_continuous(
-    name = "density",
-    limits = c(0, 0.6)
-  ) +
-  scale_x_continuous(
-    limits = c(0, 10)
-  ) +
-  theme_minimal() 
-```
+See `kernel_window_explorer.html`
 
 ## PM 2.5 data
 
@@ -628,52 +613,9 @@ $$
 $$
 
 * $\varphi$ is the standard Gaussian density $\varphi(z) = \frac{1}{\sqrt{2\pi}}\exp\left\{- \frac{z^2}{2}\right\}$
-* $b$ is the smoothing 'bandwidth'
+* $b$ is the smoothing 'bandwidth' (we'll come back to how to choose it at the end)
 
 In effect, the KDE curve at any point $\color{red}{x}$ is a weighted aggregation of *all* the data with weights proportional to their distance from $\color{red}{x}$.
-
-## Smoothing bandwidth
-
-The bandwidth parameter $b$ controls how wiggly the KDE curve is.
-
-```{r, echo=FALSE}
-#| output-location: slide
-
-# Create base histogram
-create_hist_with_density <- function(data, bw, title) {
-  ggplot(na.omit(data), aes(x = PM25_mean)) +
-    # Add histogram
-    geom_histogram(
-      aes(y = after_stat(density)),  # scale to density
-      bins = 30,
-      fill = "lightgray",
-      color = "white"
-    ) +
-    geom_density(
-      bw = bw,
-      color = "black"
-    ) +
-    labs(
-      x = "Average long-term PM 2.5",
-      y = "Density",
-      title = title
-    ) +
-    xlim(c(0, 55)) +
-    theme_bw(base_size=16)
-}
-
-# Create both plots
-plot_high_bw <- create_hist_with_density(pmdata, 3, "b = 3")
-plot_low_bw <- create_hist_with_density(pmdata, 0.5, "b = 0.5")
-
-# Combine plots side by side
-plot_high_bw | plot_low_bw
-```
-
-The choice of smoothing bandwidth can change the visual impression.
-
-* too much smoothing can obscure outliers and multiple modes
-* too little smoothing can misleadingly overemphasize sample artefacts
 
 ## Other kernels
 
@@ -726,6 +668,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 $$
 
 ```{r}
+#| output-location: slide
 n <- length(sust$Env_Domain)
 h <- 1.06 * sd(sust$Env_Domain) * n^(-1/5)
 
@@ -848,23 +791,12 @@ $$
 
 The usual approach is to decorrelate the variates and apply a product kernel $K(\mathbf{z}) = K_1(z_1)K_2(z_2)\cdots K_p(z_p)$ with separate bandwidths for each dimension.
 
-## Bivariate example
-
-::: {layout-ncol=2}
-![Bivariate histogram shown as a raster plot](figures/bivariate-hist.svg)
-
-![Contours of density estimate](figures/bivariate-kde.svg)
-
-:::
-
-Does race time seem correlated with runner's age?
-
 ## Multivariate KDE
 
 ```{r, echo=TRUE}
-library(MASS)
 #| output-location: slide
 
+library(MASS)
 # Multivariate KDE
 # Create prediction grid
 x1 <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
@@ -1167,36 +1099,18 @@ life |> ggplot() + geom_point(aes(x=log_gdp, y=life_exp)) +
 The technique consists in estimating trend by local weighted averaging; a kernel function is used to determine the exact weights.
 
 $$
-\hat{y}(x) = \frac{\sum_i K_b (x_i - x) y_i}{\sum_i K_b(x_i - x)}
+\hat{y}(x) = \frac{\sum_i K_b (x_i - x) y_i}{\sum_j K_b(x_j - x)} = \sum_i w_i y_i
 $$
+where $w_i = \frac{K_b(x_i - x)}{\sum_j K_b(x_j - x)}$ so that $\sum_i w_i = 1$
 
-![](figures/kernel-smoothing-1.PNG){width=800}
 
-Notice that the kernel smooth trails off a bit near the boundary -- this is because fewer points are being averaged once the smoothing window begins to extend beyond the range of the data.
 
-## Smoothing bandwidth
 
-As with KDE, the bandwidth controls how wiggly the smooth is.
+<center>![](figures/kernel-smoothing-1.PNG){width=50%}</center>
 
-```{r}
-#| output-location: slide
-bandwidths <- c(0.25, 1, 4)
 
-ks_bw <- purrr::map(bandwidths, \(b)
-  ksmooth(life$log_gdp, life$life_exp, kernel = "normal", bandwidth = b) |>
-    as_tibble() |>
-    mutate(bandwidth = factor(b))) |>
-  list_rbind()
+$\hat y(x)$ is a weighted average of the y values, weighted toward the observations with the most similar x's!
 
-life |> ggplot(aes(x = log_gdp, y = life_exp)) +
-  geom_point(alpha = 0.4) +
-  geom_line(aes(x = x, y = y, color = bandwidth), data = ks_bw, linewidth = 1.2) +
-  theme_bw(base_size = 16)
-```
-
-* too little smoothing chases noise from individual countries
-* too much smoothing flattens the trend and makes the boundary bias worse
-* `ksmooth` scales its kernels so their quartiles sit at $\pm$ `bandwidth`/4; for `kernel = "normal"` the standard deviation is about $0.37 \times$ `bandwidth`
 
 ## Choice of kernel
 
@@ -1204,11 +1118,11 @@ life |> ggplot(aes(x = log_gdp, y = life_exp)) +
 
 ```{r}
 #| output-location: slide
-ks_kernels <- purrr::map(c("box", "normal"), \(k)
-  ksmooth(life$log_gdp, life$life_exp, kernel = k, bandwidth = 1) |>
-    as_tibble() |>
-    mutate(kernel = k)) |>
-  list_rbind()
+ks_kernels <- tibble()
+for (k in c("box", "normal")) {
+  fit <- ksmooth(life$log_gdp, life$life_exp, kernel = k, bandwidth = 1)
+  ks_kernels <- bind_rows(ks_kernels, tibble(x = fit$x, y = fit$y, kernel = k))
+}
 
 life |> ggplot(aes(x = log_gdp, y = life_exp)) +
   geom_point(alpha = 0.4) +
@@ -1280,8 +1194,10 @@ wt
 ```
 
 ## Spatial Map of Wavy Turbans
+
 ```{r}
 #| output-location: slide
+
 library(maps)
 
 california <- map_data("state") %>%
@@ -1413,9 +1329,250 @@ count_data |> ggplot(aes(x=month, y=pct_change)) +
   geom_hline(yintercept = 0, linetype="dashed")
 ```
 
+## Bandwidth in density estimation
+
+The bandwidth parameter $b$ controls how wiggly the KDE curve is.
+
+```{r, echo=FALSE}
+#| output-location: slide
+
+# Create base histogram
+create_hist_with_density <- function(data, bw, title) {
+  ggplot(na.omit(data), aes(x = PM25_mean)) +
+    # Add histogram
+    geom_histogram(
+      aes(y = after_stat(density)),  # scale to density
+      bins = 30,
+      fill = "lightgray",
+      color = "white"
+    ) +
+    geom_density(
+      bw = bw,
+      color = "black"
+    ) +
+    labs(
+      x = "Average long-term PM 2.5",
+      y = "Density",
+      title = title
+    ) +
+    xlim(c(0, 55)) +
+    theme_bw(base_size=16)
+}
+
+# Create both plots
+plot_high_bw <- create_hist_with_density(pmdata, 3, "b = 3")
+plot_low_bw <- create_hist_with_density(pmdata, 0.5, "b = 0.5")
+
+# Combine plots side by side
+plot_high_bw | plot_low_bw
+```
+
+The choice of smoothing bandwidth can change the visual impression.
+
+* too much smoothing can obscure outliers and multiple modes
+* too little smoothing can misleadingly overemphasize sample artefacts
+
+## Bandwidth in kernel smoothing
+
+As with KDE, the bandwidth controls how wiggly the smooth is.
+
+```{r}
+#| output-location: slide
+bandwidths <- c(0.25, 1, 4)
+
+ks_bw <- tibble()
+for (b in bandwidths) {
+  fit <- ksmooth(life$log_gdp, life$life_exp, kernel = "normal", bandwidth = b)
+  ks_bw <- bind_rows(ks_bw, tibble(x = fit$x, y = fit$y, bandwidth = b))
+}
+
+life |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point(alpha = 0.4) +
+  geom_line(aes(x = x, y = y, color = factor(bandwidth)), data = ks_bw, linewidth = 1.2) +
+  labs(color = "bandwidth") +
+  theme_bw(base_size = 16)
+```
+
+* too little smoothing chases noise from individual countries
+* too much smoothing flattens the trend and makes the boundary bias worse
+<!-- * `ksmooth` scales its kernels so their quartiles sit at $\pm$ `bandwidth`/4; for `kernel = "normal"` the standard deviation is about $0.37 \times$ `bandwidth` -->
+
+## Bias–variance tradeoff
+
+Write $\hat f_b(x)$ for an estimate with bandwidth $b$ (a density estimate or a kernel smooth) and $f(x)$ for the truth it estimates. Its mean squared error splits into two parts:
+
+$$
+\text{MSE}(x) = E\Big[\big(\hat f_b(x) - f(x)\big)^2\Big]
+= \underbrace{\big(E[\hat f_b(x)] - f(x)\big)^2}_{\text{Bias}^2}
++ \underbrace{\text{Var}\big(\hat f_b(x)\big)}_{\text{Variance}}
+$$
+
+* **Variance is wiggliness.** A small bandwidth averages only a few nearby points, so the curve would look very different if we repeated the experiment and drew a new sample.
+
+* **Bias is oversmoothing.** A large bandwidth averages in points far from $x$, so the curve gets pulled flat and systematically misestimates the truth.
+
+* Shrinking the bandwidth lowers the bias and raises the variance. The best bandwidth balances the two.
+
+## Bias–variance tradeoff
+
+Three samples of 30 points from the same curve (dashed red), each smoothed with a small and a large bandwidth (blue):
+
+```{r}
+#| echo: false
+#| fig-width: 11
+#| fig-height: 5.5
+set.seed(100)
+fx <- function(x) 1/4*(x - 10)^3
+
+sims <- tibble()
+for (s in 1:3) {
+  xs <- runif(30, 1, 20)
+  sims <- bind_rows(sims, tibble(sample = s, x = xs, y = fx(xs) + rnorm(30, sd = 100)))
+}
+
+sim_fits <- tibble()
+for (s in 1:3) {
+  d <- filter(sims, sample == s)
+  for (b in c(2, 12)) {
+    fit <- ksmooth(d$x, d$y, kernel = "normal", bandwidth = b, range.x = c(1, 20), n.points = 200)
+    sim_fits <- bind_rows(sim_fits, tibble(x = fit$x, y = fit$y, sample = s, bandwidth = b))
+  }
+}
+
+ggplot() +
+  geom_point(aes(x, y), data = sims, size = 1) +
+  geom_function(fun = fx, color = "red", linetype = "dashed") +
+  geom_line(aes(x, y), data = sim_fits, color = "blue", linewidth = 1) +
+  facet_grid(bandwidth ~ sample,
+             labeller = labeller(bandwidth = \(b) paste("bandwidth =", b),
+                                 sample = \(s) paste("Sample", s))) +
+  theme_bw(base_size = 14)
+```
+
+* Top row: the curves differ a lot from sample to sample. High variance.
+* Bottom row: the curves agree with each other, but all of them miss the curvature. High bias.
+
+## Choosing the bandwidth for prediction
+
+We can't compute the MSE, because true $f$ is unknown: it is what we are trying to estimate. For a regression smooth we can instead estimate how well it *predicts* new observations.
+
+* The training error $\frac{1}{n}\sum_i \big(y_i - \hat y_b(x_i)\big)^2$ underestimates the prediction error, because the same data are used to fit the smooth and to evaluate it.
+
+* Prediction error keeps shrinking as $b \to 0$, when the smooth just passes through the observed data. It fits the sample well but don't generalize.  This is called *overfitting*.
+
+* Ideally we would fit on one sample (the *training* sample) and evaluate on an independent one (the *validation* sample).
+
+* Splitting the data once wastes data unless $n$ is large. **Cross-validation** recycles the data by switching the roles of the training and validation samples.
+
+## Leave-one-out cross-validation
+
+Each observation takes a turn as the validation sample, and the remaining $n - 1$ observations are the training sample.
+
+| Training sample | Validation sample | Prediction error |
+|-----------------|-------------------|------------------|
+| 1, ..., n-2, n-1 | n | $(\hat{y}_{(n)} - y_n)^2$ |
+| 1, ..., n-2, n | n-1 | $(\hat{y}_{(n-1)} - y_{n-1})^2$ |
+| ... | ... | ... |
+| 2, ..., n-1, n | 1 | $(\hat{y}_{(1)} - y_1)^2$ |
+
+Here $\hat y_{(i)}$ is the kernel smoothed prediction at $x_i$, computed *without* observation $i$.
+
+Requires fitting the kernel smoother $n$ times, which can be slow for large $n$.
+
+## Leave-one-out cross-validation
+
+The leave-one-out estimate of prediction error for bandwidth $b$ is
+
+$$
+CV(b) = \frac{1}{n}\sum_{i=1}^n \big(\hat{y}_{(i)} - y_i\big)^2 
+$$
+
+* Choose the bandwidth with the smallest $CV(b)$.
 
 
+## k-fold cross-validation
 
+Randomly divide the data into $k$ groups (folds) $V_1, \ldots, V_k$ of about equal size. Each fold takes a turn as the validation sample, and the remaining $k - 1$ folds are the training sample.
 
+| Training sample | Validation sample | Prediction error |
+|-----------------|-------------------|------------------|
+| $V_1, \cdots, V_{k-2}, V_{k-1}$ | $V_k$ | $\sum_{i\in V_k} (\hat{y}_{(i)} - y_i)^2$ |
+| $V_1, \cdots, V_{k-2}, V_k$ | $V_{k-1}$ | $\sum_{i\in V_{k-1}} (\hat{y}_{(i)} - y_i)^2$ |
+| ... | ... | ... |
+| $V_2, \cdots, V_{k-1}, V_k$ | $V_1$ | $\sum_{i\in V_1} (\hat{y}_{(i)} - y_i)^2$ |
 
+$$
+CV(b) = \frac{1}{k}\sum_{j=1}^k \sum_{i\in V_j} (\hat{y}_{(i)} - y_i)^2
+$$
 
+* Leave-one-out is the special case $k = n$.
+
+* $k = 5$ or $10$ needs only $k$ fits of `ksmooth` instead of $n$
+
+## Cross-validation for Life Expectancy Predictions
+
+For each bandwidth on a grid, leave out each country in turn, smooth the other 153, and predict the one left out. For comparison, also compute the training error.
+
+```{r}
+#| output-location: slide
+loo_cv <- function(b, x, y) {
+  preds <- numeric(length(x))
+  for (i in seq_along(x)) {
+    preds[i] <- ksmooth(x[-i], y[-i], kernel = "normal", bandwidth = b, x.points = x[i])$y
+  }
+  mean((y - preds)^2)
+}
+
+training_error <- function(b, x, y) {
+  o <- order(x)  # ksmooth returns its fit in increasing order of x.points
+  fit <- ksmooth(x, y, kernel = "normal", bandwidth = b, x.points = x[o])
+  mean((y[o] - fit$y)^2)
+}
+
+bandwidth_grid <- seq(0.3, 4, by = 0.1)
+cv_err <- numeric(length(bandwidth_grid))
+train_err <- numeric(length(bandwidth_grid))
+for (j in seq_along(bandwidth_grid)) {
+  cv_err[j] <- loo_cv(bandwidth_grid[j], life$log_gdp, life$life_exp)
+  train_err[j] <- training_error(bandwidth_grid[j], life$log_gdp, life$life_exp)
+}
+
+cv_results <- tibble(bandwidth = bandwidth_grid, `Cross-validation` = cv_err, Training = train_err)
+
+b_cv <- cv_results$bandwidth[which.min(cv_results$`Cross-validation`)]
+
+cv_results |>
+  pivot_longer(-bandwidth, names_to = "error", values_to = "mse") |>
+  ggplot(aes(x = bandwidth, y = mse, color = error)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = b_cv, linetype = "dashed") +
+  labs(y = "Mean squared prediction error", color = NULL) +
+  theme_bw(base_size = 16)
+```
+
+## The cross-validated bandwidth
+
+```{r}
+#| message: false
+life |> ggplot(aes(x = log_gdp, y = life_exp)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = ksmooth_method, method.args = list(bandwidth = b_cv),
+              se = FALSE, color = "red", linewidth = 1.2) +
+  theme_bw(base_size = 16)
+```
+
+## The cross-validated bandwidth
+
+* Training error keeps falling as the bandwidth shrinks. Cross-validation error is U-shaped, with its minimum at `bandwidth =` `r b_cv`, close to the `bandwidth = 1` we used earlier.
+
+* For density estimates there is no $y$ to predict, but the same idea applies: `density(x, bw = "ucv")` chooses $b$ by cross-validation.
+
+* Cross-validation picks the best bandwidth *for prediction*. For an exploratory plot, a bit more smoothing can make the main pattern easier to see.
+
+## Cross-Validation in General
+
+* Cross-validation is a general method for estimating prediction error and selecting tuning parameters in any predictive model.
+
+* The optimal tuning parameters balance bias and variance to minimize prediction error.
+
+* Extremely important in all of machine learning, where models are often highly flexible and prone to overfitting.

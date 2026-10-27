@@ -94,6 +94,22 @@
     code span.wa { color: #5e5e5e; font-style: italic; } /* Warning */
   </style>
   <link rel="stylesheet" href="density_and_smoothing_files/libs/revealjs/dist/theme/quarto-bbe7401fe57d4b791b917637bb662036.css">
+  <script>window.backupDefine = window.define; window.define = undefined;</script><script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css">
   <link href="density_and_smoothing_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="density_and_smoothing_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="density_and_smoothing_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -211,14 +227,19 @@
 <li><strong>Smoothing</strong>
 <ul>
 <li>Kernel smoothing</li>
-<li>Bandwidth and kernel choice</li>
+<li>Choice of kernel</li>
+</ul></li>
+<li><strong>Choosing the bandwidth</strong>
+<ul>
+<li>Bias–variance tradeoff</li>
+<li>Cross-validation</li>
 </ul></li>
 </ul>
 </section>
 <section id="variation-in-one-variable" class="slide level2">
 <h2>Variation in one variable</h2>
 <p><strong>Variation</strong> in data is the <em><strong>tendency of values to change from measurement to measurement</strong></em>.</p>
-<p>For example, the following observations from your mini project data are around 8 <span class="math inline">\(\mu g/m^3\)</span>, but each one is different.</p>
+<p>For example, the following observations from your mini project data are around 8 <span class="math inline">\mu g/m^3</span>, but each one is different.</p>
 <div class="cell" data-tags="[]">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href=""></a><span class="fu">print</span>(pmdata, <span class="at">n=</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
@@ -388,7 +409,7 @@
 </div><div class="column" style="width:40%;">
 <p>This shows that <em>both</em> the variation in PM 2.5 <em>and</em> the typical values are diminishing over time.</p>
 <ul>
-<li>suggests fewer cities exceed the EPA standard (12 <span class="math inline">\(\mu g/m^3\)</span>) over time</li>
+<li>suggests fewer cities exceed the EPA standard (12 <span class="math inline">\mu g/m^3</span>) over time</li>
 <li>a few outliers in some early year</li>
 <li>not the best presentation graphic, but useful exploratory graphic</li>
 </ul>
@@ -500,10 +521,10 @@
 </div>
 </div></section><section id="histograms-and-probability-densities" class="slide level2 scrollable">
 <h2>Histograms and probability densities</h2>
-<p>From 120A, a probability density/mass function, <span class="math inline">\(f(y)\)</span>, has two properties:</p>
+<p>From 120A, a probability density/mass function, <span class="math inline">f(y)</span>, has two properties:</p>
 <ol type="1">
-<li>Nonnegative: <span class="math inline">\(f(y) \geq 0\)</span> for every <span class="math inline">\(y \in \mathbb{R}\)</span>.</li>
-<li>Sums/integrates to one: <span class="math inline">\(\int_\mathbb{R} f(y) dy = 1\)</span> or <span class="math inline">\(\sum_{y \in \mathbb{R}} f(y) = 1\)</span></li>
+<li>Nonnegative: <span class="math inline">f(y) \geq 0</span> for every <span class="math inline">y \in \mathbb{R}</span>.</li>
+<li>Sums/integrates to one: <span class="math inline">\int_\mathbb{R} f(y) dy = 1</span> or <span class="math inline">\sum_{y \in \mathbb{R}} f(y) = 1</span></li>
 </ol>
 <p>Histograms are <em>almost</em> proper density functions: they satisfy (1) but not (2).</p>
 </section>
@@ -511,20 +532,20 @@
 <h2>A preliminary: indicator functions</h2>
 <p>In what follows we’re going to express the histogram mathematically as a function of data values.</p>
 <p>This will require the use of <strong>indicator functions</strong>, which are simply <em><strong>functions that are 1 or 0 depending on a condition</strong></em>. They are denoted like this:</p>
-<p><span class="math display">\[
+<p><span class="math display">
 \mathbf{1}\{\text{condition}\} = \begin{cases} 1 &amp;\text{ if condition is true} \\ 0 &amp;\text{ if condition is false} \end{cases}
-\]</span></p>
+</span></p>
 <p>The sum of an indicator gives a count of how many times the condition is met:</p>
-<p><span class="math display">\[
+<p><span class="math display">
 \sum_i \mathbf{1}\{y_i &gt; 0\} = \#\text{ of values that are positive}
-\]</span></p>
+</span></p>
 </section>
 <section id="count-scale-histograms" class="slide level2">
 <h2>Count scale histograms</h2>
 <p>When the bar height is a count of the number of observations in each bin, the histogram is on the <strong>count scale</strong>.</p>
-<p>More precisely, if the values are <span class="math inline">\(y_1, \dots, y_n\)</span>, then the height of the bar for the <span class="math inline">\(j\)</span>th bin <span class="math inline">\(B_j = (a_j, b_j]\)</span> is: <span class="math display">\[
+<p>More precisely, if the values are <span class="math inline">y_1, \dots, y_n</span>, then the height of the bar for the <span class="math inline">j</span>th bin <span class="math inline">B_j = (a_j, b_j]</span> is: <span class="math display">
 \text{height}_j = \sum_{i = 1}^n \mathbf{1}\{y_i \in B_j\}
-\]</span></p>
+</span></p>
 </section>
 <section id="count-scale-histograms-1" class="slide level2">
 <h2>Count scale histograms</h2>
@@ -564,11 +585,11 @@
 </section>
 <section id="density-scale-histograms" class="slide level2">
 <h2>Density scale histograms</h2>
-<p>A fix that ensures comparability of scale for any two histograms is to <font color="red">normalize</font> heights by bin width <span class="math inline">\(b\)</span> and sample size <span class="math inline">\(n\)</span>.</p>
-<p><span class="math display">\[
+<p>A fix that ensures comparability of scale for any two histograms is to <font color="red">normalize</font> heights by bin width <span class="math inline">b</span> and sample size <span class="math inline">n</span>.</p>
+<p><span class="math display">
 \text{height}_j = \color{red}{\frac{1}{nb}} \sum_{i = 1}^n \mathbf{1}\{y_i \in B_j\} \quad\text{where}\quad b = b_j - a_j
-\]</span></p>
-<p>Now the area under the histogram is <span class="math inline">\(\sum_j b \times \text{height}_j = 1\)</span>, so we call this a <strong>density scale</strong> histogram, because it is a valid probability density.</p>
+</span></p>
+<p>Now the area under the histogram is <span class="math inline">\sum_j b \times \text{height}_j = 1</span>, so we call this a <strong>density scale</strong> histogram, because it is a valid probability density.</p>
 </section>
 <section id="density-scale-histograms-1" class="slide level2">
 <h2>Density scale histograms</h2>
@@ -611,7 +632,7 @@
 <h2>Why not just use a histogram?</h2>
 <p>A histogram makes you choose two things that are nowhere in the data:</p>
 <ol type="1">
-<li>the <strong>bin width</strong> <span class="math inline">\(b\)</span></li>
+<li>the <strong>bin width</strong> <span class="math inline">b</span></li>
 <li>where the bins <strong>start</strong>, the <em>bin origin</em></li>
 </ol>
 <p>Both choices change what the picture. To see this, take just the 2018 PM 2.5 values:</p>
@@ -628,20 +649,23 @@
 </section>
 <section id="shifting-the-bins-changes-the-story" class="slide level2">
 <h2>Shifting the bins changes the story</h2>
-<p>Same data, same bin width (<span class="math inline">\(b = 2.5\)</span>), only the <em>starting point</em> of the bins moves:</p>
+<p>Same data, same bin width (<span class="math inline">b = 2.5</span>), only the <em>starting point</em> of the bins moves:</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb20"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href=""></a>b <span class="ot">&lt;-</span> <span class="fl">2.5</span></span>
 <span id="cb20-2"><a href=""></a>shifts <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.25</span>, <span class="fl">0.5</span>, <span class="fl">0.75</span>) <span class="sc">*</span> b</span>
 <span id="cb20-3"><a href=""></a></span>
-<span id="cb20-4"><a href=""></a>bars <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(shifts, \(s) <span class="fu">hist_bars</span>(pm18, b, s) <span class="sc">|&gt;</span></span>
-<span id="cb20-5"><a href=""></a>                  <span class="fu">mutate</span>(<span class="at">origin =</span> <span class="fu">sprintf</span>(<span class="st">"bins start at %.2f"</span>, s)))</span>
-<span id="cb20-6"><a href=""></a></span>
-<span id="cb20-7"><a href=""></a><span class="fu">ggplot</span>(bars, <span class="fu">aes</span>(<span class="at">x =</span> mid, <span class="at">y =</span> density)) <span class="sc">+</span></span>
-<span id="cb20-8"><a href=""></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> b, <span class="at">fill =</span> <span class="st">"lightgray"</span>, <span class="at">color =</span> <span class="st">"white"</span>) <span class="sc">+</span></span>
-<span id="cb20-9"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> origin, <span class="at">nrow =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb20-10"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">20</span>)) <span class="sc">+</span></span>
-<span id="cb20-11"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"PM 2.5 (2018)"</span>, <span class="at">y =</span> <span class="st">"density"</span>) <span class="sc">+</span></span>
-<span id="cb20-12"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb20-4"><a href=""></a>bars <span class="ot">&lt;-</span> <span class="fu">tibble</span>()</span>
+<span id="cb20-5"><a href=""></a><span class="cf">for</span> (s <span class="cf">in</span> shifts) {</span>
+<span id="cb20-6"><a href=""></a>  bars_s <span class="ot">&lt;-</span> <span class="fu">hist_bars</span>(pm18, b, s) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">origin =</span> <span class="fu">sprintf</span>(<span class="st">"bins start at %.2f"</span>, s))</span>
+<span id="cb20-7"><a href=""></a>  bars <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(bars, bars_s)</span>
+<span id="cb20-8"><a href=""></a>}</span>
+<span id="cb20-9"><a href=""></a></span>
+<span id="cb20-10"><a href=""></a><span class="fu">ggplot</span>(bars, <span class="fu">aes</span>(<span class="at">x =</span> mid, <span class="at">y =</span> density)) <span class="sc">+</span></span>
+<span id="cb20-11"><a href=""></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> b, <span class="at">fill =</span> <span class="st">"lightgray"</span>, <span class="at">color =</span> <span class="st">"white"</span>) <span class="sc">+</span></span>
+<span id="cb20-12"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> origin, <span class="at">nrow =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb20-13"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">20</span>)) <span class="sc">+</span></span>
+<span id="cb20-14"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"PM 2.5 (2018)"</span>, <span class="at">y =</span> <span class="st">"density"</span>) <span class="sc">+</span></span>
+<span id="cb20-15"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 <ul>
@@ -664,17 +688,21 @@
 <div class="cell">
 <div class="sourceCode cell-code" id="cb21"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href=""></a>widths <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">8</span>)</span>
 <span id="cb21-2"><a href=""></a></span>
-<span id="cb21-3"><a href=""></a>barsw <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(widths, \(w) <span class="fu">hist_bars</span>(pm18, w)) <span class="sc">|&gt;</span></span>
-<span id="cb21-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">lab =</span> <span class="fu">factor</span>(<span class="fu">sprintf</span>(<span class="st">"bin width = %.2f"</span>, bw),</span>
-<span id="cb21-5"><a href=""></a>                      <span class="at">levels =</span> <span class="fu">sprintf</span>(<span class="st">"bin width = %.2f"</span>, widths)))</span>
-<span id="cb21-6"><a href=""></a></span>
-<span id="cb21-7"><a href=""></a><span class="fu">ggplot</span>(barsw) <span class="sc">+</span></span>
-<span id="cb21-8"><a href=""></a>  <span class="fu">geom_rect</span>(<span class="fu">aes</span>(<span class="at">xmin =</span> mid <span class="sc">-</span> bw<span class="sc">/</span><span class="dv">2</span>, <span class="at">xmax =</span> mid <span class="sc">+</span> bw<span class="sc">/</span><span class="dv">2</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> density),</span>
-<span id="cb21-9"><a href=""></a>            <span class="at">fill =</span> <span class="st">"lightgray"</span>, <span class="at">color =</span> <span class="st">"white"</span>) <span class="sc">+</span></span>
-<span id="cb21-10"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> lab, <span class="at">nrow =</span> <span class="dv">1</span>, <span class="at">scales =</span> <span class="st">"free_y"</span>) <span class="sc">+</span></span>
-<span id="cb21-11"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">22</span>)) <span class="sc">+</span></span>
-<span id="cb21-12"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"PM 2.5 (2018)"</span>, <span class="at">y =</span> <span class="st">"density"</span>) <span class="sc">+</span></span>
-<span id="cb21-13"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb21-3"><a href=""></a>barsw <span class="ot">&lt;-</span> <span class="fu">tibble</span>()</span>
+<span id="cb21-4"><a href=""></a><span class="cf">for</span> (w <span class="cf">in</span> widths) {</span>
+<span id="cb21-5"><a href=""></a>  barsw <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(barsw, <span class="fu">hist_bars</span>(pm18, w))</span>
+<span id="cb21-6"><a href=""></a>}</span>
+<span id="cb21-7"><a href=""></a>barsw <span class="ot">&lt;-</span> barsw <span class="sc">|&gt;</span></span>
+<span id="cb21-8"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">lab =</span> <span class="fu">factor</span>(<span class="fu">sprintf</span>(<span class="st">"bin width = %.2f"</span>, bw),</span>
+<span id="cb21-9"><a href=""></a>                      <span class="at">levels =</span> <span class="fu">sprintf</span>(<span class="st">"bin width = %.2f"</span>, widths)))</span>
+<span id="cb21-10"><a href=""></a></span>
+<span id="cb21-11"><a href=""></a><span class="fu">ggplot</span>(barsw) <span class="sc">+</span></span>
+<span id="cb21-12"><a href=""></a>  <span class="fu">geom_rect</span>(<span class="fu">aes</span>(<span class="at">xmin =</span> mid <span class="sc">-</span> bw<span class="sc">/</span><span class="dv">2</span>, <span class="at">xmax =</span> mid <span class="sc">+</span> bw<span class="sc">/</span><span class="dv">2</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> density),</span>
+<span id="cb21-13"><a href=""></a>            <span class="at">fill =</span> <span class="st">"lightgray"</span>, <span class="at">color =</span> <span class="st">"white"</span>) <span class="sc">+</span></span>
+<span id="cb21-14"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> lab, <span class="at">nrow =</span> <span class="dv">1</span>, <span class="at">scales =</span> <span class="st">"free_y"</span>) <span class="sc">+</span></span>
+<span id="cb21-15"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">22</span>)) <span class="sc">+</span></span>
+<span id="cb21-16"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"PM 2.5 (2018)"</span>, <span class="at">y =</span> <span class="st">"density"</span>) <span class="sc">+</span></span>
+<span id="cb21-17"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 <ul>
@@ -777,23 +805,20 @@
 </section>
 <section id="a-local-histogram" class="slide level2">
 <h2>A ‘local’ histogram</h2>
-<p>One could do a ‘moving window’ binning by allowing the height at <span class="math inline">\(\color{red}{x}\)</span> to be a normalization of the count <em>in a neighborhood of <span class="math inline">\(x\)</span> of width <span class="math inline">\(b\)</span></em> rather than in one of a fixed set of bins:</p>
-<p><span class="math display">\[
+<p>One could do a ‘moving window’ binning by allowing the height at <span class="math inline">\color{red}{x}</span> to be a normalization of the count <em>in a neighborhood of <span class="math inline">x</span> of width <span class="math inline">b</span></em> rather than in one of a fixed set of bins:</p>
+<p><span class="math display">
 \text{hist}_\text{local}(\color{red}{x}) = \frac{1}{nb} \sum_{i = 1}^n \mathbf{1}\left\{|x_i - \color{red}{x}| &lt; \frac{b}{2}\right\}
-\]</span></p>
-<p>Let’s call this a <strong>local histogram</strong>, because the height at any point <span class="math inline">\(\color{red}{x}\)</span> is determined relative to the exact location of <span class="math inline">\(\color{red}{x}\)</span>.</p>
+</span></p>
+<p>Let’s call this a <strong>local histogram</strong>, because the height at any point <span class="math inline">\color{red}{x}</span> is determined relative to the exact location of <span class="math inline">\color{red}{x}</span>.</p>
 
 <img data-src="figures/local-bins.png" class="r-stretch"></section>
 <section id="demo" class="slide level2">
 <h2>Demo</h2>
-<p><span class="math display">\[
-\text{hist}_\text{local}(\color{red}{x}) = \frac{1}{nb} \sum_{i = 1}^n \mathbf{1}\left\{|x_i - \color{red}{x}| &lt; \frac{b}{2}\right\}
-\]</span></p>
-
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-22-1.png" width="960" class="r-stretch"></section>
+<p>See <code>kernel_window_explorer.html</code></p>
+</section>
 <section id="pm-2.5-data" class="slide level2">
 <h2>PM 2.5 data</h2>
-<p>Here’s what that would look like with <span class="math inline">\(b = 1\)</span> for the air quality data:</p>
+<p>Here’s what that would look like with <span class="math inline">b = 1</span> for the air quality data:</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb24"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href=""></a><span class="co"># output-location: slide</span></span>
 <span id="cb24-2"><a href=""></a></span>
@@ -824,7 +849,7 @@
 <span id="cb24-27"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-23-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-22-1.png" width="960" class="r-stretch"></section>
 <section id="pm-2.5-data-1" class="slide level2">
 <h2>PM 2.5 data</h2>
 <p>Zooming in reveals that this is still a step function:</p>
@@ -838,50 +863,40 @@
 <span id="cb25-7"><a href=""></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span> <span class="fu">xlim</span>(<span class="fu">c</span>(<span class="dv">6</span>, <span class="dv">15</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-24-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-23-1.png" width="960" class="r-stretch"></section>
 <section id="the-kernel-function" class="slide level2">
 <h2>The kernel function</h2>
-<p>The local histogram is in fact a density estimate with a uniform ‘kernel’: <span class="math display">\[
+<p>The local histogram is in fact a density estimate with a uniform ‘kernel’: <span class="math display">
 \text{hist}_\text{local}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n \underbrace{\frac{1}{b}\mathbf{1}\left\{|x_i - \color{red}{x}| &lt; \frac{b}{2}\right\}}_\text{kernel function}
-\]</span></p>
+</span></p>
 <ul>
-<li>uniform because the kernel function is constant about <span class="math inline">\(x\)</span></li>
-<li>when <span class="math inline">\(x_1, \dots, x_n\)</span> are a random sample, this is an estimate of the population denisty</li>
+<li>uniform because the kernel function is constant about <span class="math inline">x</span></li>
+<li>when <span class="math inline">x_1, \dots, x_n</span> are a random sample, this is an estimate of the population denisty</li>
 </ul>
 </section>
 <section id="gaussian-kde" class="slide level2">
 <h2>Gaussian KDE</h2>
-<p>Replacing the uniform kernel with a Gaussian kernel yields a smooth density estimate: <span class="math display">\[
+<p>Replacing the uniform kernel with a Gaussian kernel yields a smooth density estimate: <span class="math display">
 \hat{f}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n \frac{1}{b}\varphi\left(\frac{x_i - \color{red}{x}}{b}\right)
-\]</span></p>
+</span></p>
 <ul>
-<li><span class="math inline">\(\varphi\)</span> is the standard Gaussian density <span class="math inline">\(\varphi(z) = \frac{1}{\sqrt{2\pi}}\exp\left\{- \frac{z^2}{2}\right\}\)</span></li>
-<li><span class="math inline">\(b\)</span> is the smoothing ‘bandwidth’</li>
+<li><span class="math inline">\varphi</span> is the standard Gaussian density <span class="math inline">\varphi(z) = \frac{1}{\sqrt{2\pi}}\exp\left\{- \frac{z^2}{2}\right\}</span></li>
+<li><span class="math inline">b</span> is the smoothing ‘bandwidth’ (we’ll come back to how to choose it at the end)</li>
 </ul>
-<p>In effect, the KDE curve at any point <span class="math inline">\(\color{red}{x}\)</span> is a weighted aggregation of <em>all</em> the data with weights proportional to their distance from <span class="math inline">\(\color{red}{x}\)</span>.</p>
-</section>
-<section id="smoothing-bandwidth" class="slide level2">
-<h2>Smoothing bandwidth</h2>
-<p>The bandwidth parameter <span class="math inline">\(b\)</span> controls how wiggly the KDE curve is.</p>
-
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-25-1.png" width="960" class="r-stretch"><p>The choice of smoothing bandwidth can change the visual impression.</p>
-<ul>
-<li>too much smoothing can obscure outliers and multiple modes</li>
-<li>too little smoothing can misleadingly overemphasize sample artefacts</li>
-</ul>
+<p>In effect, the KDE curve at any point <span class="math inline">\color{red}{x}</span> is a weighted aggregation of <em>all</em> the data with weights proportional to their distance from <span class="math inline">\color{red}{x}</span>.</p>
 </section>
 <section id="other-kernels" class="slide level2">
 <h2>Other kernels</h2>
-<p>In general, a KDE can be computed with any appropriately normalized nonnegative kernel function <span class="math inline">\(K_b(\cdot)\)</span>.</p>
-<p><span class="math display">\[
+<p>In general, a KDE can be computed with any appropriately normalized nonnegative kernel function <span class="math inline">K_b(\cdot)</span>.</p>
+<p><span class="math display">
 \hat{f}_{K_b}(\color{red}{x}) = \frac{1}{n} \sum_{i = 1}^n K_b\left(x_i - \color{red}{x}\right)
-\]</span></p>
+</span></p>
 <p>Other common kernel functions include:</p>
 <ul>
-<li>triangular kernel <span class="math inline">\(K(z) = 1 - |z|\)</span></li>
-<li>parabolic kernel <span class="math inline">\(K(z) \propto 1 - z^2\)</span></li>
-<li>cosine kernel <span class="math inline">\(K(z) \propto \cos\left(\frac{\pi z}{2}\right)\)</span></li>
-<li>circular density <span class="math inline">\(K(z) \propto \exp\left\{k\cos(z)\right\}\)</span></li>
+<li>triangular kernel <span class="math inline">K(z) = 1 - |z|</span></li>
+<li>parabolic kernel <span class="math inline">K(z) \propto 1 - z^2</span></li>
+<li>cosine kernel <span class="math inline">K(z) \propto \cos\left(\frac{\pi z}{2}\right)</span></li>
+<li>circular density <span class="math inline">K(z) \propto \exp\left\{k\cos(z)\right\}</span></li>
 <li>any symmetric continuous probability density function</li>
 </ul>
 </section>
@@ -925,13 +940,13 @@
 <span id="cb28-6"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability index"</span>, <span class="at">y =</span> <span class="st">"Density"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-27-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-25-1.png" width="960" class="r-stretch"></section>
 <section id="kde-bandwidth-selection" class="slide level2">
 <h2>KDE bandwidth selection</h2>
 <p>A common choice for Gaussian KDE bandwidth is Scott’s rule:</p>
-<p><span class="math display">\[
+<p><span class="math display">
 b = 1.06 \times \hat \sigma \times n^{-1/5}
-\]</span></p>
+</span></p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb29"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href=""></a>n <span class="ot">&lt;-</span> <span class="fu">length</span>(sust<span class="sc">$</span>Env_Domain)</span>
 <span id="cb29-2"><a href=""></a>h <span class="ot">&lt;-</span> <span class="fl">1.06</span> <span class="sc">*</span> <span class="fu">sd</span>(sust<span class="sc">$</span>Env_Domain) <span class="sc">*</span> n<span class="sc">^</span>(<span class="sc">-</span><span class="dv">1</span><span class="sc">/</span><span class="dv">5</span>)</span>
@@ -946,10 +961,18 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb29-11"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability index"</span>,</span>
 <span id="cb29-12"><a href=""></a>       <span class="at">y =</span> <span class="st">"Density"</span>) <span class="sc">+</span></span>
 <span id="cb29-13"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-28-1.png" width="960" class="r-stretch"></section>
-<section id="other-kernels-1" class="slide level2">
+
+</section>
+<section id="kde-bandwidth-selection-output" class="slide level2 output-location-slide"><h2>KDE bandwidth selection</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-26-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="other-kernels-1" class="slide level2">
 <h2>Other Kernels</h2>
 <p><code>geom_density</code> plots a smooth density based on itself calling the <code>density</code> function in R.</p>
 <div class="cell">
@@ -984,7 +1007,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb31-2"><a href=""></a>(<span class="fu">plot_density</span>(<span class="st">"epanechnikov"</span>) <span class="sc">+</span> <span class="fu">plot_density</span>(<span class="st">"triangular"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-30-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-28-1.png" width="960" class="r-stretch"></section>
 <section id="section-1" class="slide level2">
 <h2></h2>
 <div class="cell">
@@ -1004,7 +1027,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb32-14"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-31-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-29-1.png" width="960" class="r-stretch"></section>
 <section id="d-histograms" class="slide level2">
 <h2>2D Histograms</h2>
 </section>
@@ -1019,7 +1042,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb33-5"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability"</span>, <span class="at">y =</span> <span class="st">"Economic sustainability"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-32-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-30-1.png" width="960" class="r-stretch"></section>
 <section id="d-histograms-1" class="slide level2">
 <h2>2D Histograms</h2>
 <div class="cell">
@@ -1031,7 +1054,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb34-6"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability"</span>, <span class="at">y =</span> <span class="st">"Economic sustainability"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-33-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-31-1.png" width="960" class="r-stretch"></section>
 <section id="d-histograms-2" class="slide level2">
 <h2>2D Histograms</h2>
 <div class="cell">
@@ -1043,83 +1066,62 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb35-6"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability"</span>, <span class="at">y =</span> <span class="st">"Economic sustainability"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-34-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-32-1.png" width="960" class="r-stretch"></section>
 <section id="kde-in-higher" class="slide level2">
 <h2>KDE in higher</h2>
-<p>KDE can be generalized to estimating joint densities in <span class="math inline">\(p\)</span> dimensions:</p>
-<p><span class="math display">\[
+<p>KDE can be generalized to estimating joint densities in <span class="math inline">p</span> dimensions:</p>
+<p><span class="math display">
 \hat{f}_K (\mathbf{x}) = \frac{1}{n} \sum_i |\mathbf{B}|^{-1/2} K \left(\mathbf{B^{-1/2}}(\mathbf{x} - \mathbf{x}_i)\right)
-\]</span></p>
+</span></p>
 <ul>
-<li><span class="math inline">\(\mathbf{x}\in\mathbb{R}^p\)</span> is a <span class="math inline">\(p\)</span>-dimensional vector</li>
-<li><span class="math inline">\(K:\mathbb{R}^p \rightarrow \mathbb{R}\)</span> is a nonnegative kernel function</li>
-<li><span class="math inline">\(B\)</span> is a <span class="math inline">\(p\times p\)</span> matrix of bandwidth parameters</li>
+<li><span class="math inline">\mathbf{x}\in\mathbb{R}^p</span> is a <span class="math inline">p</span>-dimensional vector</li>
+<li><span class="math inline">K:\mathbb{R}^p \rightarrow \mathbb{R}</span> is a nonnegative kernel function</li>
+<li><span class="math inline">B</span> is a <span class="math inline">p\times p</span> matrix of bandwidth parameters</li>
 </ul>
-<p>The usual approach is to decorrelate the variates and apply a product kernel <span class="math inline">\(K(\mathbf{z}) = K_1(z_1)K_2(z_2)\cdots K_p(z_p)\)</span> with separate bandwidths for each dimension.</p>
-</section>
-<section id="bivariate-example" class="slide level2">
-<h2>Bivariate example</h2>
-<div>
-
-</div>
-<div class="quarto-layout-panel" data-layout-ncol="2">
-<div class="quarto-layout-row">
-<div class="quarto-layout-cell" style="flex-basis: 50.0%;justify-content: flex-start;">
-<div class="quarto-figure quarto-figure-center">
-<figure>
-<p><img data-src="figures/bivariate-hist.svg"></p>
-<figcaption>Bivariate histogram shown as a raster plot</figcaption>
-</figure>
-</div>
-</div>
-<div class="quarto-layout-cell" style="flex-basis: 50.0%;justify-content: flex-start;">
-<div class="quarto-figure quarto-figure-center">
-<figure>
-<p><img data-src="figures/bivariate-kde.svg"></p>
-<figcaption>Contours of density estimate</figcaption>
-</figure>
-</div>
-</div>
-</div>
-</div>
-<p>Does race time seem correlated with runner’s age?</p>
+<p>The usual approach is to decorrelate the variates and apply a product kernel <span class="math inline">K(\mathbf{z}) = K_1(z_1)K_2(z_2)\cdots K_p(z_p)</span> with separate bandwidths for each dimension.</p>
 </section>
 <section id="multivariate-kde" class="slide level2">
 <h2>Multivariate KDE</h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb36"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href=""></a><span class="fu">library</span>(MASS)</span>
-<span id="cb36-2"><a href=""></a><span class="co">#| output-location: slide</span></span>
-<span id="cb36-3"><a href=""></a></span>
-<span id="cb36-4"><a href=""></a><span class="co"># Multivariate KDE</span></span>
-<span id="cb36-5"><a href=""></a><span class="co"># Create prediction grid</span></span>
-<span id="cb36-6"><a href=""></a>x1 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Env_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Env_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
-<span id="cb36-7"><a href=""></a>x2 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Econ_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Econ_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
-<span id="cb36-8"><a href=""></a>grid <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">env =</span> x1, <span class="at">econ =</span> x2)</span>
-<span id="cb36-9"><a href=""></a></span>
-<span id="cb36-10"><a href=""></a><span class="co"># Compute 2D KDE</span></span>
-<span id="cb36-11"><a href=""></a>kde2d_result <span class="ot">&lt;-</span> <span class="fu">kde2d</span>(sust<span class="sc">$</span>Env_Domain, sust<span class="sc">$</span>Econ_Domain, <span class="at">n =</span> <span class="dv">100</span>)</span>
-<span id="cb36-12"><a href=""></a></span>
-<span id="cb36-13"><a href=""></a><span class="co"># Convert to data frame for plotting</span></span>
-<span id="cb36-14"><a href=""></a>kde_df <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">x =</span> kde2d_result<span class="sc">$</span>x, <span class="at">y =</span> kde2d_result<span class="sc">$</span>y)</span>
-<span id="cb36-15"><a href=""></a>kde_df<span class="sc">$</span>z <span class="ot">&lt;-</span> <span class="fu">as.vector</span>(kde2d_result<span class="sc">$</span>z)</span>
-<span id="cb36-16"><a href=""></a></span>
-<span id="cb36-17"><a href=""></a><span class="co"># Plot 2D KDE</span></span>
-<span id="cb36-18"><a href=""></a><span class="fu">ggplot</span>(kde_df, <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">fill =</span> z)) <span class="sc">+</span></span>
-<span id="cb36-19"><a href=""></a>  <span class="fu">geom_tile</span>() <span class="sc">+</span></span>
-<span id="cb36-20"><a href=""></a>  <span class="fu">scale_fill_viridis_c</span>() <span class="sc">+</span></span>
-<span id="cb36-21"><a href=""></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
-<span id="cb36-22"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability"</span>, <span class="at">y =</span> <span class="st">"Economic sustadinability"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-
+<span id="cb36-2"><a href=""></a><span class="co"># Multivariate KDE</span></span>
+<span id="cb36-3"><a href=""></a><span class="co"># Create prediction grid</span></span>
+<span id="cb36-4"><a href=""></a>x1 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Env_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Env_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb36-5"><a href=""></a>x2 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Econ_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Econ_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb36-6"><a href=""></a>grid <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">env =</span> x1, <span class="at">econ =</span> x2)</span>
+<span id="cb36-7"><a href=""></a></span>
+<span id="cb36-8"><a href=""></a><span class="co"># Compute 2D KDE</span></span>
+<span id="cb36-9"><a href=""></a>kde2d_result <span class="ot">&lt;-</span> <span class="fu">kde2d</span>(sust<span class="sc">$</span>Env_Domain, sust<span class="sc">$</span>Econ_Domain, <span class="at">n =</span> <span class="dv">100</span>)</span>
+<span id="cb36-10"><a href=""></a></span>
+<span id="cb36-11"><a href=""></a><span class="co"># Convert to data frame for plotting</span></span>
+<span id="cb36-12"><a href=""></a>kde_df <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">x =</span> kde2d_result<span class="sc">$</span>x, <span class="at">y =</span> kde2d_result<span class="sc">$</span>y)</span>
+<span id="cb36-13"><a href=""></a>kde_df<span class="sc">$</span>z <span class="ot">&lt;-</span> <span class="fu">as.vector</span>(kde2d_result<span class="sc">$</span>z)</span>
+<span id="cb36-14"><a href=""></a></span>
+<span id="cb36-15"><a href=""></a><span class="co"># Plot 2D KDE</span></span>
+<span id="cb36-16"><a href=""></a><span class="fu">ggplot</span>(kde_df, <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">fill =</span> z)) <span class="sc">+</span></span>
+<span id="cb36-17"><a href=""></a>  <span class="fu">geom_tile</span>() <span class="sc">+</span></span>
+<span id="cb36-18"><a href=""></a>  <span class="fu">scale_fill_viridis_c</span>() <span class="sc">+</span></span>
+<span id="cb36-19"><a href=""></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
+<span id="cb36-20"><a href=""></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Environmental sustainability"</span>, <span class="at">y =</span> <span class="st">"Economic sustadinability"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-35-1.png" width="960" class="r-stretch"></section>
-<section id="geom_density_2d" class="slide level2">
+
+</section>
+<section id="multivariate-kde-output" class="slide level2 output-location-slide"><h2>Multivariate KDE</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-33-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="geom_density_2d" class="slide level2">
 <h2><code>geom_density_2d</code></h2>
 <p><code>geom_density_2d</code> calls <code>kde2d</code> and automates this process.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb37"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href=""></a>sust <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_density_2d_filled</span>(<span class="fu">aes</span>(<span class="at">x=</span>Env_Domain, <span class="at">y=</span>Econ_Domain))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-36-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-34-1.png" width="960" class="r-stretch"></section>
 <section id="geom_density_2d-1" class="slide level2">
 <h2><code>geom_density_2d</code></h2>
 <ul>
@@ -1131,7 +1133,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <div class="sourceCode cell-code" id="cb38"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href=""></a>sust <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_density_2d_filled</span>(<span class="fu">aes</span>(<span class="at">x=</span>Env_Domain, <span class="at">y=</span>Econ_Domain), <span class="at">adjust=</span><span class="dv">1</span><span class="sc">/</span><span class="dv">2</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-37-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-35-1.png" width="960" class="r-stretch"></section>
 <section id="geom_hdr" class="slide level2">
 <h2><code>geom_hdr</code></h2>
 <ul>
@@ -1145,7 +1147,7 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb39-4"><a href=""></a>  <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-38-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-36-1.png" width="960" class="r-stretch"></section>
 <section id="sustainability-data-revisited" class="slide level2">
 <h2>Sustainability data, revisited</h2>
 <div class="cell">
@@ -1291,7 +1293,7 @@ ggplot() +
 ```
 
 ::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-44-1.png){width=960}
+![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-42-1.png){width=960}
 :::
 :::
 
@@ -1314,7 +1316,7 @@ ggplot() +
 ```
 
 ::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-45-1.png){width=960}
+![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-43-1.png){width=960}
 :::
 :::
 
@@ -1393,7 +1395,7 @@ ggplot(samp, aes(x = length)) +
 ```
 
 ::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-48-1.png){width=960}
+![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-46-1.png){width=960}
 :::
 :::
 
@@ -1499,13 +1501,13 @@ samp |> ggplot() +
 ```
 
 ::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-51-1.png){width=960}
+![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-49-1.png){width=960}
 :::
 :::
 
 
 -->
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-39-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-37-1.png" width="960" class="r-stretch"></section>
 <section id="kernel-smoothing" class="slide level2">
 <h2>Kernel smoothing</h2>
 <p>Kernel smoothing is a technique similar to KDE used to visualize and estimate <em>relationships</em> (rather than distributions).</p>
@@ -1534,65 +1536,35 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-52-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-50-1.png" width="960"></p>
 </figure>
 </div>
 </div>
 </div></section><section id="the-method" class="slide level2">
 <h2>The method</h2>
 <p>The technique consists in estimating trend by local weighted averaging; a kernel function is used to determine the exact weights.</p>
-<p><span class="math display">\[
-\hat{y}(x) = \frac{\sum_i K_b (x_i - x) y_i}{\sum_i K_b(x_i - x)}
-\]</span></p>
-
-<img data-src="figures/kernel-smoothing-1.PNG" width="800" class="r-stretch"><p>Notice that the kernel smooth trails off a bit near the boundary – this is because fewer points are being averaged once the smoothing window begins to extend beyond the range of the data.</p>
+<p><span class="math display">
+\hat{y}(x) = \frac{\sum_i K_b (x_i - x) y_i}{\sum_j K_b(x_j - x)} = \sum_i w_i y_i
+</span> where <span class="math inline">w_i = \frac{K_b(x_i - x)}{\sum_j K_b(x_j - x)}</span> so that <span class="math inline">\sum_i w_i = 1</span></p>
+<center>
+<img data-src="figures/kernel-smoothing-1.PNG" style="width:50.0%">
+</center>
+<p><span class="math inline">\hat y(x)</span> is a weighted average of the y values, weighted toward the observations with the most similar x’s!</p>
 </section>
-<section id="smoothing-bandwidth-1" class="slide level2">
-<h2>Smoothing bandwidth</h2>
-<p>As with KDE, the bandwidth controls how wiggly the smooth is.</p>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href=""></a>bandwidths <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="dv">1</span>, <span class="dv">4</span>)</span>
-<span id="cb42-2"><a href=""></a></span>
-<span id="cb42-3"><a href=""></a>ks_bw <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">map</span>(bandwidths, \(b)</span>
-<span id="cb42-4"><a href=""></a>  <span class="fu">ksmooth</span>(life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp, <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> b) <span class="sc">|&gt;</span></span>
-<span id="cb42-5"><a href=""></a>    <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb42-6"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">bandwidth =</span> <span class="fu">factor</span>(b))) <span class="sc">|&gt;</span></span>
-<span id="cb42-7"><a href=""></a>  <span class="fu">list_rbind</span>()</span>
-<span id="cb42-8"><a href=""></a></span>
-<span id="cb42-9"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
-<span id="cb42-10"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
-<span id="cb42-11"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">color =</span> bandwidth), <span class="at">data =</span> ks_bw, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb42-12"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-
-<ul>
-<li>too little smoothing chases noise from individual countries</li>
-<li>too much smoothing flattens the trend and makes the boundary bias worse</li>
-<li><code>ksmooth</code> scales its kernels so their quartiles sit at <span class="math inline">\(\pm\)</span> <code>bandwidth</code>/4; for <code>kernel = "normal"</code> the standard deviation is about <span class="math inline">\(0.37 \times\)</span> <code>bandwidth</code></li>
-</ul>
-</section>
-<section id="smoothing-bandwidth-1-output" class="slide level2 output-location-slide"><h2>Smoothing bandwidth</h2><div class="cell output-location-slide">
-<div class="cell-output-display">
-<div>
-<figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-53-1.png" width="960"></p>
-</figure>
-</div>
-</div>
-</div></section><section id="choice-of-kernel" class="slide level2">
+<section id="choice-of-kernel" class="slide level2">
 <h2>Choice of kernel</h2>
 <p><code>ksmooth</code> offers two kernels: <code>"box"</code> (uniform) and <code>"normal"</code> (Gaussian).</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href=""></a>ks_kernels <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">map</span>(<span class="fu">c</span>(<span class="st">"box"</span>, <span class="st">"normal"</span>), \(k)</span>
-<span id="cb43-2"><a href=""></a>  <span class="fu">ksmooth</span>(life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp, <span class="at">kernel =</span> k, <span class="at">bandwidth =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
-<span id="cb43-3"><a href=""></a>    <span class="fu">as_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb43-4"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">kernel =</span> k)) <span class="sc">|&gt;</span></span>
-<span id="cb43-5"><a href=""></a>  <span class="fu">list_rbind</span>()</span>
-<span id="cb43-6"><a href=""></a></span>
-<span id="cb43-7"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
-<span id="cb43-8"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
-<span id="cb43-9"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">color =</span> kernel), <span class="at">data =</span> ks_kernels, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb43-10"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href=""></a>ks_kernels <span class="ot">&lt;-</span> <span class="fu">tibble</span>()</span>
+<span id="cb42-2"><a href=""></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">c</span>(<span class="st">"box"</span>, <span class="st">"normal"</span>)) {</span>
+<span id="cb42-3"><a href=""></a>  fit <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp, <span class="at">kernel =</span> k, <span class="at">bandwidth =</span> <span class="dv">1</span>)</span>
+<span id="cb42-4"><a href=""></a>  ks_kernels <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(ks_kernels, <span class="fu">tibble</span>(<span class="at">x =</span> fit<span class="sc">$</span>x, <span class="at">y =</span> fit<span class="sc">$</span>y, <span class="at">kernel =</span> k))</span>
+<span id="cb42-5"><a href=""></a>}</span>
+<span id="cb42-6"><a href=""></a></span>
+<span id="cb42-7"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
+<span id="cb42-8"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
+<span id="cb42-9"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">color =</span> kernel), <span class="at">data =</span> ks_kernels, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb42-10"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 <p>As with KDE, the bandwidth matters much more than the kernel. The box kernel gives a slightly rougher curve because each point enters or leaves the window abruptly.</p>
@@ -1601,7 +1573,7 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-54-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-51-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1609,46 +1581,46 @@ samp |> ggplot() +
 <h2>Kernel smoothing with <code>geom_smooth</code></h2>
 <p><code>geom_smooth</code> has no built-in kernel smoother, but its <code>method</code> argument accepts any function that returns a fitted model with a <code>predict</code> method. A short wrapper around <code>ksmooth</code> is enough:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href=""></a>ksmooth_method <span class="ot">&lt;-</span> <span class="cf">function</span>(formula, data, <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>, ...) {</span>
-<span id="cb44-2"><a href=""></a>  <span class="fu">structure</span>(<span class="fu">list</span>(<span class="at">x =</span> data<span class="sc">$</span>x, <span class="at">y =</span> data<span class="sc">$</span>y, <span class="at">kernel =</span> kernel, <span class="at">bandwidth =</span> bandwidth),</span>
-<span id="cb44-3"><a href=""></a>            <span class="at">class =</span> <span class="st">"ksmooth_method"</span>)</span>
-<span id="cb44-4"><a href=""></a>}</span>
-<span id="cb44-5"><a href=""></a></span>
-<span id="cb44-6"><a href=""></a>predict.ksmooth_method <span class="ot">&lt;-</span> <span class="cf">function</span>(object, newdata, ...) {</span>
-<span id="cb44-7"><a href=""></a>  <span class="fu">ksmooth</span>(object<span class="sc">$</span>x, object<span class="sc">$</span>y, <span class="at">kernel =</span> object<span class="sc">$</span>kernel,</span>
-<span id="cb44-8"><a href=""></a>          <span class="at">bandwidth =</span> object<span class="sc">$</span>bandwidth, <span class="at">x.points =</span> newdata<span class="sc">$</span>x)<span class="sc">$</span>y</span>
-<span id="cb44-9"><a href=""></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb43"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href=""></a>ksmooth_method <span class="ot">&lt;-</span> <span class="cf">function</span>(formula, data, <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>, ...) {</span>
+<span id="cb43-2"><a href=""></a>  <span class="fu">structure</span>(<span class="fu">list</span>(<span class="at">x =</span> data<span class="sc">$</span>x, <span class="at">y =</span> data<span class="sc">$</span>y, <span class="at">kernel =</span> kernel, <span class="at">bandwidth =</span> bandwidth),</span>
+<span id="cb43-3"><a href=""></a>            <span class="at">class =</span> <span class="st">"ksmooth_method"</span>)</span>
+<span id="cb43-4"><a href=""></a>}</span>
+<span id="cb43-5"><a href=""></a></span>
+<span id="cb43-6"><a href=""></a>predict.ksmooth_method <span class="ot">&lt;-</span> <span class="cf">function</span>(object, newdata, ...) {</span>
+<span id="cb43-7"><a href=""></a>  <span class="fu">ksmooth</span>(object<span class="sc">$</span>x, object<span class="sc">$</span>y, <span class="at">kernel =</span> object<span class="sc">$</span>kernel,</span>
+<span id="cb43-8"><a href=""></a>          <span class="at">bandwidth =</span> object<span class="sc">$</span>bandwidth, <span class="at">x.points =</span> newdata<span class="sc">$</span>x)<span class="sc">$</span>y</span>
+<span id="cb43-9"><a href=""></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="kernel-smoothing-with-geom_smooth-1" class="slide level2">
 <h2>Kernel smoothing with <code>geom_smooth</code></h2>
 <p>Pass the wrapper as <code>method</code>, and the kernel and bandwidth through <code>method.args</code>:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb45"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb45-1"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
-<span id="cb45-2"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb45-3"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method,</span>
-<span id="cb45-4"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>),</span>
-<span id="cb45-5"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb45-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
+<span id="cb44-2"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb44-3"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method,</span>
+<span id="cb44-4"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>),</span>
+<span id="cb44-5"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb44-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-56-1.png" width="960" class="r-stretch"><p>This is the same curve we computed with <code>ksmooth</code> at the start of this section. Keep <code>se = FALSE</code>, since the wrapper doesn’t compute standard errors.</p>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-53-1.png" width="960" class="r-stretch"><p>This is the same curve we computed with <code>ksmooth</code> at the start of this section. Keep <code>se = FALSE</code>, since the wrapper doesn’t compute standard errors.</p>
 </section>
 <section id="gaps-in-the-data" class="slide level2">
 <h2>Gaps in the data</h2>
 <p>What happens when part of the range has no data? Here we drop the middle-income countries:</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href=""></a>life2 <span class="ot">&lt;-</span> life <span class="sc">|&gt;</span> <span class="fu">filter</span>(log_gdp <span class="sc">&gt;</span> <span class="fl">8.5</span> <span class="sc">|</span> log_gdp <span class="sc">&lt;</span> <span class="dv">7</span>)</span>
-<span id="cb46-2"><a href=""></a></span>
-<span id="cb46-3"><a href=""></a>life2 <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
-<span id="cb46-4"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb46-5"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method,</span>
-<span id="cb46-6"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>),</span>
-<span id="cb46-7"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb46-8"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb45"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb45-1"><a href=""></a>life2 <span class="ot">&lt;-</span> life <span class="sc">|&gt;</span> <span class="fu">filter</span>(log_gdp <span class="sc">&gt;</span> <span class="fl">8.5</span> <span class="sc">|</span> log_gdp <span class="sc">&lt;</span> <span class="dv">7</span>)</span>
+<span id="cb45-2"><a href=""></a></span>
+<span id="cb45-3"><a href=""></a>life2 <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
+<span id="cb45-4"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb45-5"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method,</span>
+<span id="cb45-6"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>),</span>
+<span id="cb45-7"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb45-8"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-57-1.png" width="960" class="r-stretch"><p>Inside the gap, the smooth is a weighted average of the nearest points on either side, so it draws a smooth curve where there are no observations at all.</p>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-54-1.png" width="960" class="r-stretch"><p>Inside the gap, the smooth is a weighted average of the nearest points on either side, so it draws a smooth curve where there are no observations at all.</p>
 </section>
 <section id="example-wavy-turbans-at-the-beach" class="slide level2">
 <h2>Example: Wavy Turban’s at the beach</h2>
@@ -1659,9 +1631,9 @@ samp |> ggplot() +
 <section id="example-wavy-turbans-at-the-beach-1" class="slide level2">
 <h2>Example: Wavy Turban’s at the beach</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb47"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href=""></a>wt <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">'data/wavy_turban_data.csv'</span>)</span>
-<span id="cb47-2"><a href=""></a></span>
-<span id="cb47-3"><a href=""></a>wt</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb46"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href=""></a>wt <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">'data/wavy_turban_data.csv'</span>)</span>
+<span id="cb46-2"><a href=""></a></span>
+<span id="cb46-3"><a href=""></a>wt</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 6,087 × 40
         id uuid        observed_on_string observed_on time_observed_at time_zone
@@ -1689,33 +1661,33 @@ samp |> ggplot() +
 <section id="spatial-map-of-wavy-turbans" class="slide level2">
 <h2>Spatial Map of Wavy Turbans</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href=""></a><span class="fu">library</span>(maps)</span>
-<span id="cb49-2"><a href=""></a></span>
-<span id="cb49-3"><a href=""></a>california <span class="ot">&lt;-</span> <span class="fu">map_data</span>(<span class="st">"state"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb49-4"><a href=""></a>  <span class="fu">subset</span>(region <span class="sc">==</span> <span class="st">"california"</span>)</span>
-<span id="cb49-5"><a href=""></a></span>
-<span id="cb49-6"><a href=""></a><span class="fu">ggplot</span>() <span class="sc">+</span></span>
-<span id="cb49-7"><a href=""></a>  <span class="fu">geom_polygon</span>(<span class="at">data =</span> california, </span>
-<span id="cb49-8"><a href=""></a>               <span class="fu">aes</span>(<span class="at">x =</span> long, <span class="at">y =</span> lat, <span class="at">group =</span> group),</span>
-<span id="cb49-9"><a href=""></a>               <span class="at">fill =</span> <span class="st">"white"</span>, </span>
-<span id="cb49-10"><a href=""></a>               <span class="at">color =</span> <span class="st">"black"</span>) <span class="sc">+</span></span>
-<span id="cb49-11"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> wt <span class="sc">|&gt;</span> <span class="fu">filter</span>(longitude <span class="sc">&lt;</span> <span class="sc">-</span><span class="dv">115</span> <span class="sc">&amp;</span> longitude <span class="sc">&gt;</span> <span class="sc">-</span><span class="dv">125</span>,</span>
-<span id="cb49-12"><a href=""></a>                               latitude <span class="sc">&lt;</span> <span class="dv">45</span> <span class="sc">&amp;</span> latitude <span class="sc">&gt;</span> <span class="fl">32.5</span>,</span>
-<span id="cb49-13"><a href=""></a>                               observed_on <span class="sc">&gt;=</span> <span class="st">"2015-01-01"</span>),</span>
-<span id="cb49-14"><a href=""></a>             <span class="fu">aes</span>(<span class="at">x =</span> longitude, <span class="at">y =</span> latitude),</span>
-<span id="cb49-15"><a href=""></a>             <span class="at">col =</span> <span class="st">"red"</span>,</span>
-<span id="cb49-16"><a href=""></a>             <span class="at">size =</span> <span class="fl">0.5</span>,</span>
-<span id="cb49-17"><a href=""></a>             <span class="at">alpha =</span> <span class="fl">0.6</span>,</span>
-<span id="cb49-18"><a href=""></a>             <span class="at">bins=</span><span class="dv">100</span>) <span class="sc">+</span></span>
-<span id="cb49-19"><a href=""></a>  <span class="co"># Set the coordinate system</span></span>
-<span id="cb49-20"><a href=""></a>  <span class="fu">coord_map</span>() <span class="sc">+</span></span>
-<span id="cb49-21"><a href=""></a>  <span class="co"># Customize the theme</span></span>
-<span id="cb49-22"><a href=""></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
-<span id="cb49-23"><a href=""></a>  <span class="co"># Add labels</span></span>
-<span id="cb49-24"><a href=""></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Wavy Turban Observations"</span>,</span>
-<span id="cb49-25"><a href=""></a>       <span class="at">x =</span> <span class="st">"Longitude"</span>,</span>
-<span id="cb49-26"><a href=""></a>       <span class="at">y =</span> <span class="st">"Latitude"</span>) <span class="sc">+</span></span>
-<span id="cb49-27"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">ylim=</span><span class="fu">c</span>(<span class="fl">32.5</span>, <span class="dv">36</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb48"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb48-1"><a href=""></a><span class="fu">library</span>(maps)</span>
+<span id="cb48-2"><a href=""></a></span>
+<span id="cb48-3"><a href=""></a>california <span class="ot">&lt;-</span> <span class="fu">map_data</span>(<span class="st">"state"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb48-4"><a href=""></a>  <span class="fu">subset</span>(region <span class="sc">==</span> <span class="st">"california"</span>)</span>
+<span id="cb48-5"><a href=""></a></span>
+<span id="cb48-6"><a href=""></a><span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb48-7"><a href=""></a>  <span class="fu">geom_polygon</span>(<span class="at">data =</span> california, </span>
+<span id="cb48-8"><a href=""></a>               <span class="fu">aes</span>(<span class="at">x =</span> long, <span class="at">y =</span> lat, <span class="at">group =</span> group),</span>
+<span id="cb48-9"><a href=""></a>               <span class="at">fill =</span> <span class="st">"white"</span>, </span>
+<span id="cb48-10"><a href=""></a>               <span class="at">color =</span> <span class="st">"black"</span>) <span class="sc">+</span></span>
+<span id="cb48-11"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> wt <span class="sc">|&gt;</span> <span class="fu">filter</span>(longitude <span class="sc">&lt;</span> <span class="sc">-</span><span class="dv">115</span> <span class="sc">&amp;</span> longitude <span class="sc">&gt;</span> <span class="sc">-</span><span class="dv">125</span>,</span>
+<span id="cb48-12"><a href=""></a>                               latitude <span class="sc">&lt;</span> <span class="dv">45</span> <span class="sc">&amp;</span> latitude <span class="sc">&gt;</span> <span class="fl">32.5</span>,</span>
+<span id="cb48-13"><a href=""></a>                               observed_on <span class="sc">&gt;=</span> <span class="st">"2015-01-01"</span>),</span>
+<span id="cb48-14"><a href=""></a>             <span class="fu">aes</span>(<span class="at">x =</span> longitude, <span class="at">y =</span> latitude),</span>
+<span id="cb48-15"><a href=""></a>             <span class="at">col =</span> <span class="st">"red"</span>,</span>
+<span id="cb48-16"><a href=""></a>             <span class="at">size =</span> <span class="fl">0.5</span>,</span>
+<span id="cb48-17"><a href=""></a>             <span class="at">alpha =</span> <span class="fl">0.6</span>,</span>
+<span id="cb48-18"><a href=""></a>             <span class="at">bins=</span><span class="dv">100</span>) <span class="sc">+</span></span>
+<span id="cb48-19"><a href=""></a>  <span class="co"># Set the coordinate system</span></span>
+<span id="cb48-20"><a href=""></a>  <span class="fu">coord_map</span>() <span class="sc">+</span></span>
+<span id="cb48-21"><a href=""></a>  <span class="co"># Customize the theme</span></span>
+<span id="cb48-22"><a href=""></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
+<span id="cb48-23"><a href=""></a>  <span class="co"># Add labels</span></span>
+<span id="cb48-24"><a href=""></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Wavy Turban Observations"</span>,</span>
+<span id="cb48-25"><a href=""></a>       <span class="at">x =</span> <span class="st">"Longitude"</span>,</span>
+<span id="cb48-26"><a href=""></a>       <span class="at">y =</span> <span class="st">"Latitude"</span>) <span class="sc">+</span></span>
+<span id="cb48-27"><a href=""></a>  <span class="fu">coord_cartesian</span>(<span class="at">ylim=</span><span class="fu">c</span>(<span class="fl">32.5</span>, <span class="dv">36</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 </section>
@@ -1723,21 +1695,21 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-59-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-56-1.png" width="960"></p>
 </figure>
 </div>
 </div>
 </div></section><section id="counts-by-month-and-year" class="slide level2">
 <h2>Counts by month and year</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb50"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb50-1"><a href=""></a>count_data <span class="ot">&lt;-</span> wt <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(observed_on), </span>
-<span id="cb50-2"><a href=""></a>             <span class="at">month =</span> <span class="fu">month</span>(date), </span>
-<span id="cb50-3"><a href=""></a>             <span class="at">year =</span> <span class="fu">year</span>(date)) <span class="sc">|&gt;</span> </span>
-<span id="cb50-4"><a href=""></a>  <span class="fu">group_by</span>(month, year) <span class="sc">|&gt;</span> </span>
-<span id="cb50-5"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">count =</span> <span class="fu">n</span>()) <span class="sc">|&gt;</span> </span>
-<span id="cb50-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(<span class="fu">paste</span>(year, month, <span class="st">"1"</span>, <span class="at">sep=</span><span class="st">"-"</span>))) <span class="sc">|&gt;</span> </span>
-<span id="cb50-7"><a href=""></a>  <span class="fu">arrange</span>(date) <span class="sc">|&gt;</span> <span class="fu">filter</span>(year <span class="sc">&gt;</span> <span class="dv">2015</span>)</span>
-<span id="cb50-8"><a href=""></a><span class="fu">print</span>(count_data, <span class="at">n=</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb49"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href=""></a>count_data <span class="ot">&lt;-</span> wt <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(observed_on), </span>
+<span id="cb49-2"><a href=""></a>             <span class="at">month =</span> <span class="fu">month</span>(date), </span>
+<span id="cb49-3"><a href=""></a>             <span class="at">year =</span> <span class="fu">year</span>(date)) <span class="sc">|&gt;</span> </span>
+<span id="cb49-4"><a href=""></a>  <span class="fu">group_by</span>(month, year) <span class="sc">|&gt;</span> </span>
+<span id="cb49-5"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">count =</span> <span class="fu">n</span>()) <span class="sc">|&gt;</span> </span>
+<span id="cb49-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">ymd</span>(<span class="fu">paste</span>(year, month, <span class="st">"1"</span>, <span class="at">sep=</span><span class="st">"-"</span>))) <span class="sc">|&gt;</span> </span>
+<span id="cb49-7"><a href=""></a>  <span class="fu">arrange</span>(date) <span class="sc">|&gt;</span> <span class="fu">filter</span>(year <span class="sc">&gt;</span> <span class="dv">2015</span>)</span>
+<span id="cb49-8"><a href=""></a><span class="fu">print</span>(count_data, <span class="at">n=</span><span class="dv">10</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 109 × 4
 # Groups:   month [12]
@@ -1760,99 +1732,343 @@ samp |> ggplot() +
 <section id="wavy-turban-counts-on-inaturalist" class="slide level2">
 <h2>Wavy Turban counts on iNaturalist</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
-<span id="cb52-2"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>count)) <span class="sc">+</span> </span>
-<span id="cb52-3"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb51"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb51-1"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
+<span id="cb51-2"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>count)) <span class="sc">+</span> </span>
+<span id="cb51-3"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-61-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-58-1.png" width="960" class="r-stretch"></section>
 <section id="smoothing-wavy-turban-counts" class="slide level2">
 <h2>Smoothing Wavy Turban Counts</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb53-1"><a href=""></a><span class="co"># dates are stored as days, so a bandwidth of 730 is about two years</span></span>
-<span id="cb53-2"><a href=""></a>predictions <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(<span class="fu">as.numeric</span>(count_data<span class="sc">$</span>date), count_data<span class="sc">$</span>count,</span>
-<span id="cb53-3"><a href=""></a>                       <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">730</span>,</span>
-<span id="cb53-4"><a href=""></a>                       <span class="at">x.points =</span> <span class="fu">as.numeric</span>(count_data<span class="sc">$</span>date))<span class="sc">$</span>y</span>
-<span id="cb53-5"><a href=""></a></span>
-<span id="cb53-6"><a href=""></a>count_data<span class="sc">$</span>preds <span class="ot">&lt;-</span> predictions</span>
-<span id="cb53-7"><a href=""></a></span>
-<span id="cb53-8"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
-<span id="cb53-9"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>count)) <span class="sc">+</span> </span>
-<span id="cb53-10"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
-<span id="cb53-11"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y=</span>preds), <span class="at">col=</span><span class="st">"red"</span>, <span class="at">size=</span><span class="fl">1.2</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb52"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href=""></a><span class="co"># dates are stored as days, so a bandwidth of 730 is about two years</span></span>
+<span id="cb52-2"><a href=""></a>predictions <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(<span class="fu">as.numeric</span>(count_data<span class="sc">$</span>date), count_data<span class="sc">$</span>count,</span>
+<span id="cb52-3"><a href=""></a>                       <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">730</span>,</span>
+<span id="cb52-4"><a href=""></a>                       <span class="at">x.points =</span> <span class="fu">as.numeric</span>(count_data<span class="sc">$</span>date))<span class="sc">$</span>y</span>
+<span id="cb52-5"><a href=""></a></span>
+<span id="cb52-6"><a href=""></a>count_data<span class="sc">$</span>preds <span class="ot">&lt;-</span> predictions</span>
+<span id="cb52-7"><a href=""></a></span>
+<span id="cb52-8"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
+<span id="cb52-9"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>count)) <span class="sc">+</span> </span>
+<span id="cb52-10"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
+<span id="cb52-11"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y=</span>preds), <span class="at">col=</span><span class="st">"red"</span>, <span class="at">size=</span><span class="fl">1.2</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-62-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-59-1.png" width="960" class="r-stretch"></section>
 <section id="residuals" class="slide level2">
 <h2>Residuals</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href=""></a>count_data<span class="sc">$</span>residual <span class="ot">&lt;-</span> count_data<span class="sc">$</span>count <span class="sc">-</span> count_data<span class="sc">$</span>preds</span>
-<span id="cb54-2"><a href=""></a></span>
-<span id="cb54-3"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
-<span id="cb54-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>residual)) <span class="sc">+</span> </span>
-<span id="cb54-5"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
-<span id="cb54-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb53"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb53-1"><a href=""></a>count_data<span class="sc">$</span>residual <span class="ot">&lt;-</span> count_data<span class="sc">$</span>count <span class="sc">-</span> count_data<span class="sc">$</span>preds</span>
+<span id="cb53-2"><a href=""></a></span>
+<span id="cb53-3"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
+<span id="cb53-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>residual)) <span class="sc">+</span> </span>
+<span id="cb53-5"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
+<span id="cb53-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-63-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-60-1.png" width="960" class="r-stretch"></section>
 <section id="percent-change" class="slide level2">
 <h2>Percent Change</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href=""></a>count_data<span class="sc">$</span>pct_change <span class="ot">&lt;-</span> <span class="dv">100</span> <span class="sc">*</span> (count_data<span class="sc">$</span>count <span class="sc">/</span> count_data<span class="sc">$</span>preds) <span class="sc">-</span> <span class="dv">100</span></span>
-<span id="cb55-2"><a href=""></a></span>
-<span id="cb55-3"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
-<span id="cb55-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>pct_change)) <span class="sc">+</span> </span>
-<span id="cb55-5"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
-<span id="cb55-6"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>) <span class="sc">+</span></span>
-<span id="cb55-7"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href=""></a>count_data<span class="sc">$</span>pct_change <span class="ot">&lt;-</span> <span class="dv">100</span> <span class="sc">*</span> (count_data<span class="sc">$</span>count <span class="sc">/</span> count_data<span class="sc">$</span>preds) <span class="sc">-</span> <span class="dv">100</span></span>
+<span id="cb54-2"><a href=""></a></span>
+<span id="cb54-3"><a href=""></a>count_data <span class="sc">|&gt;</span></span>
+<span id="cb54-4"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>pct_change)) <span class="sc">+</span> </span>
+<span id="cb54-5"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> </span>
+<span id="cb54-6"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>) <span class="sc">+</span></span>
+<span id="cb54-7"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-64-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-61-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb56"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">group_by</span>(month) <span class="sc">|&gt;</span></span>
-<span id="cb56-2"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">pct_change =</span> <span class="fu">median</span>(pct_change)) <span class="sc">|&gt;</span></span>
-<span id="cb56-3"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span> </span>
+<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">group_by</span>(month) <span class="sc">|&gt;</span></span>
+<span id="cb55-2"><a href=""></a>  <span class="fu">summarize</span>(<span class="at">pct_change =</span> <span class="fu">median</span>(pct_change)) <span class="sc">|&gt;</span></span>
+<span id="cb55-3"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span> </span>
+<span id="cb55-4"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span> </span>
+<span id="cb55-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+
+</div>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-62-1.png" width="960" class="r-stretch"></section>
+<section id="percent-change-by-month" class="slide level2">
+<h2>Percent Change by Month</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb56"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href=""></a>count_data <span class="sc">|&gt;</span> </span>
+<span id="cb56-2"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
+<span id="cb56-3"><a href=""></a>  ggdist<span class="sc">::</span><span class="fu">stat_dist_interval</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
 <span id="cb56-4"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span> </span>
 <span id="cb56-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-65-1.png" width="960" class="r-stretch"></section>
-<section id="percent-change-by-month" class="slide level2">
-<h2>Percent Change by Month</h2>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb57"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb57-1"><a href=""></a>count_data <span class="sc">|&gt;</span> </span>
-<span id="cb57-2"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
-<span id="cb57-3"><a href=""></a>  ggdist<span class="sc">::</span><span class="fu">stat_dist_interval</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
-<span id="cb57-4"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span> </span>
-<span id="cb57-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-
-</div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-66-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-63-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month-1" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
-<span id="cb58-2"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb58-3"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method, <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">bandwidth =</span> <span class="dv">3</span>),</span>
-<span id="cb58-4"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"blue"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb57"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb57-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
+<span id="cb57-2"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb57-3"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method, <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">bandwidth =</span> <span class="dv">3</span>),</span>
+<span id="cb57-4"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"blue"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-67-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-64-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month-2" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <p>Smooth again!</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
-<span id="cb59-2"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method, <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">bandwidth =</span> <span class="dv">3</span>),</span>
-<span id="cb59-3"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"blue"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
-<span id="cb59-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>mean_pct_change), count_data <span class="sc">|&gt;</span> <span class="fu">group_by</span>(month) <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="at">mean_pct_change =</span> <span class="fu">mean</span>(pct_change))) <span class="sc">+</span></span>
-<span id="cb59-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href=""></a>count_data <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>pct_change)) <span class="sc">+</span></span>
+<span id="cb58-2"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method, <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">bandwidth =</span> <span class="dv">3</span>),</span>
+<span id="cb58-3"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"blue"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) <span class="sc">+</span></span>
+<span id="cb58-4"><a href=""></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">x=</span>month, <span class="at">y=</span>mean_pct_change), count_data <span class="sc">|&gt;</span> <span class="fu">group_by</span>(month) <span class="sc">|&gt;</span> <span class="fu">summarize</span>(<span class="at">mean_pct_change =</span> <span class="fu">mean</span>(pct_change))) <span class="sc">+</span></span>
+<span id="cb58-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-65-1.png" width="960" class="r-stretch"></section>
+<section id="bandwidth-in-density-estimation" class="slide level2">
+<h2>Bandwidth in density estimation</h2>
+<p>The bandwidth parameter <span class="math inline">b</span> controls how wiggly the KDE curve is.</p>
 
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-68-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-66-1.png" width="960" class="r-stretch"><p>The choice of smoothing bandwidth can change the visual impression.</p>
+<ul>
+<li>too much smoothing can obscure outliers and multiple modes</li>
+<li>too little smoothing can misleadingly overemphasize sample artefacts</li>
+</ul>
+</section>
+<section id="bandwidth-in-kernel-smoothing" class="slide level2">
+<h2>Bandwidth in kernel smoothing</h2>
+<p>As with KDE, the bandwidth controls how wiggly the smooth is.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href=""></a>bandwidths <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.25</span>, <span class="dv">1</span>, <span class="dv">4</span>)</span>
+<span id="cb59-2"><a href=""></a></span>
+<span id="cb59-3"><a href=""></a>ks_bw <span class="ot">&lt;-</span> <span class="fu">tibble</span>()</span>
+<span id="cb59-4"><a href=""></a><span class="cf">for</span> (b <span class="cf">in</span> bandwidths) {</span>
+<span id="cb59-5"><a href=""></a>  fit <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp, <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> b)</span>
+<span id="cb59-6"><a href=""></a>  ks_bw <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(ks_bw, <span class="fu">tibble</span>(<span class="at">x =</span> fit<span class="sc">$</span>x, <span class="at">y =</span> fit<span class="sc">$</span>y, <span class="at">bandwidth =</span> b))</span>
+<span id="cb59-7"><a href=""></a>}</span>
+<span id="cb59-8"><a href=""></a></span>
+<span id="cb59-9"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
+<span id="cb59-10"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>) <span class="sc">+</span></span>
+<span id="cb59-11"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">color =</span> <span class="fu">factor</span>(bandwidth)), <span class="at">data =</span> ks_bw, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb59-12"><a href=""></a>  <span class="fu">labs</span>(<span class="at">color =</span> <span class="st">"bandwidth"</span>) <span class="sc">+</span></span>
+<span id="cb59-13"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+<ul>
+<li>too little smoothing chases noise from individual countries</li>
+<li>too much smoothing flattens the trend and makes the boundary bias worse <!-- * `ksmooth` scales its kernels so their quartiles sit at $\pm$ `bandwidth`/4; for `kernel = "normal"` the standard deviation is about $0.37 \times$ `bandwidth` --></li>
+</ul>
+</section>
+<section id="bandwidth-in-kernel-smoothing-output" class="slide level2 output-location-slide"><h2>Bandwidth in kernel smoothing</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-67-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="biasvariance-tradeoff" class="slide level2">
+<h2>Bias–variance tradeoff</h2>
+<p>Write <span class="math inline">\hat f_b(x)</span> for an estimate with bandwidth <span class="math inline">b</span> (a density estimate or a kernel smooth) and <span class="math inline">f(x)</span> for the truth it estimates. Its mean squared error splits into two parts:</p>
+<p><span class="math display">
+\text{MSE}(x) = E\Big[\big(\hat f_b(x) - f(x)\big)^2\Big]
+= \underbrace{\big(E[\hat f_b(x)] - f(x)\big)^2}_{\text{Bias}^2}
++ \underbrace{\text{Var}\big(\hat f_b(x)\big)}_{\text{Variance}}
+</span></p>
+<ul>
+<li><p><strong>Variance is wiggliness.</strong> A small bandwidth averages only a few nearby points, so the curve would look very different if we repeated the experiment and drew a new sample.</p></li>
+<li><p><strong>Bias is oversmoothing.</strong> A large bandwidth averages in points far from <span class="math inline">x</span>, so the curve gets pulled flat and systematically misestimates the truth.</p></li>
+<li><p>Shrinking the bandwidth lowers the bias and raises the variance. The best bandwidth balances the two.</p></li>
+</ul>
+</section>
+<section id="biasvariance-tradeoff-1" class="slide level2">
+<h2>Bias–variance tradeoff</h2>
+<p>Three samples of 30 points from the same curve (dashed red), each smoothed with a small and a large bandwidth (blue):</p>
+
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-68-1.png" width="1056" class="r-stretch"><ul>
+<li>Top row: the curves differ a lot from sample to sample. High variance.</li>
+<li>Bottom row: the curves agree with each other, but all of them miss the curvature. High bias.</li>
+</ul>
+</section>
+<section id="choosing-the-bandwidth-for-prediction" class="slide level2">
+<h2>Choosing the bandwidth for prediction</h2>
+<p>We can’t compute the MSE, because true <span class="math inline">f</span> is unknown: it is what we are trying to estimate. For a regression smooth we can instead estimate how well it <em>predicts</em> new observations.</p>
+<ul>
+<li><p>The training error <span class="math inline">\frac{1}{n}\sum_i \big(y_i - \hat y_b(x_i)\big)^2</span> underestimates the prediction error, because the same data are used to fit the smooth and to evaluate it.</p></li>
+<li><p>Prediction error keeps shrinking as <span class="math inline">b \to 0</span>, when the smooth just passes through the observed data. It fits the sample well but don’t generalize. This is called <em>overfitting</em>.</p></li>
+<li><p>Ideally we would fit on one sample (the <em>training</em> sample) and evaluate on an independent one (the <em>validation</em> sample).</p></li>
+<li><p>Splitting the data once wastes data unless <span class="math inline">n</span> is large. <strong>Cross-validation</strong> recycles the data by switching the roles of the training and validation samples.</p></li>
+</ul>
+</section>
+<section id="leave-one-out-cross-validation" class="slide level2">
+<h2>Leave-one-out cross-validation</h2>
+<p>Each observation takes a turn as the validation sample, and the remaining <span class="math inline">n - 1</span> observations are the training sample.</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Training sample</th>
+<th>Validation sample</th>
+<th>Prediction error</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1, …, n-2, n-1</td>
+<td>n</td>
+<td><span class="math inline">(\hat{y}_{(n)} - y_n)^2</span></td>
+</tr>
+<tr class="even">
+<td>1, …, n-2, n</td>
+<td>n-1</td>
+<td><span class="math inline">(\hat{y}_{(n-1)} - y_{n-1})^2</span></td>
+</tr>
+<tr class="odd">
+<td>…</td>
+<td>…</td>
+<td>…</td>
+</tr>
+<tr class="even">
+<td>2, …, n-1, n</td>
+<td>1</td>
+<td><span class="math inline">(\hat{y}_{(1)} - y_1)^2</span></td>
+</tr>
+</tbody>
+</table>
+<p>Here <span class="math inline">\hat y_{(i)}</span> is the kernel smoothed prediction at <span class="math inline">x_i</span>, computed <em>without</em> observation <span class="math inline">i</span>.</p>
+<p>Requires fitting the kernel smoother <span class="math inline">n</span> times, which can be slow for large <span class="math inline">n</span>.</p>
+</section>
+<section id="leave-one-out-cross-validation-1" class="slide level2">
+<h2>Leave-one-out cross-validation</h2>
+<p>The leave-one-out estimate of prediction error for bandwidth <span class="math inline">b</span> is</p>
+<p><span class="math display">
+CV(b) = \frac{1}{n}\sum_{i=1}^n \big(\hat{y}_{(i)} - y_i\big)^2
+</span></p>
+<ul>
+<li>Choose the bandwidth with the smallest <span class="math inline">CV(b)</span>.</li>
+</ul>
+</section>
+<section id="k-fold-cross-validation" class="slide level2">
+<h2>k-fold cross-validation</h2>
+<p>Randomly divide the data into <span class="math inline">k</span> groups (folds) <span class="math inline">V_1, \ldots, V_k</span> of about equal size. Each fold takes a turn as the validation sample, and the remaining <span class="math inline">k - 1</span> folds are the training sample.</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 31%">
+<col style="width: 35%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Training sample</th>
+<th>Validation sample</th>
+<th>Prediction error</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">V_1, \cdots, V_{k-2}, V_{k-1}</span></td>
+<td><span class="math inline">V_k</span></td>
+<td><span class="math inline">\sum_{i\in V_k} (\hat{y}_{(i)} - y_i)^2</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">V_1, \cdots, V_{k-2}, V_k</span></td>
+<td><span class="math inline">V_{k-1}</span></td>
+<td><span class="math inline">\sum_{i\in V_{k-1}} (\hat{y}_{(i)} - y_i)^2</span></td>
+</tr>
+<tr class="odd">
+<td>…</td>
+<td>…</td>
+<td>…</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">V_2, \cdots, V_{k-1}, V_k</span></td>
+<td><span class="math inline">V_1</span></td>
+<td><span class="math inline">\sum_{i\in V_1} (\hat{y}_{(i)} - y_i)^2</span></td>
+</tr>
+</tbody>
+</table>
+<p><span class="math display">
+CV(b) = \frac{1}{k}\sum_{j=1}^k \sum_{i\in V_j} (\hat{y}_{(i)} - y_i)^2
+</span></p>
+<ul>
+<li><p>Leave-one-out is the special case <span class="math inline">k = n</span>.</p></li>
+<li><p><span class="math inline">k = 5</span> or <span class="math inline">10</span> needs only <span class="math inline">k</span> fits of <code>ksmooth</code> instead of <span class="math inline">n</span></p></li>
+</ul>
+</section>
+<section id="cross-validation-for-life-expectancy-predictions" class="slide level2">
+<h2>Cross-validation for Life Expectancy Predictions</h2>
+<p>For each bandwidth on a grid, leave out each country in turn, smooth the other 153, and predict the one left out. For comparison, also compute the training error.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href=""></a>loo_cv <span class="ot">&lt;-</span> <span class="cf">function</span>(b, x, y) {</span>
+<span id="cb60-2"><a href=""></a>  preds <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(x))</span>
+<span id="cb60-3"><a href=""></a>  <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(x)) {</span>
+<span id="cb60-4"><a href=""></a>    preds[i] <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(x[<span class="sc">-</span>i], y[<span class="sc">-</span>i], <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> b, <span class="at">x.points =</span> x[i])<span class="sc">$</span>y</span>
+<span id="cb60-5"><a href=""></a>  }</span>
+<span id="cb60-6"><a href=""></a>  <span class="fu">mean</span>((y <span class="sc">-</span> preds)<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb60-7"><a href=""></a>}</span>
+<span id="cb60-8"><a href=""></a></span>
+<span id="cb60-9"><a href=""></a>training_error <span class="ot">&lt;-</span> <span class="cf">function</span>(b, x, y) {</span>
+<span id="cb60-10"><a href=""></a>  o <span class="ot">&lt;-</span> <span class="fu">order</span>(x)  <span class="co"># ksmooth returns its fit in increasing order of x.points</span></span>
+<span id="cb60-11"><a href=""></a>  fit <span class="ot">&lt;-</span> <span class="fu">ksmooth</span>(x, y, <span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> b, <span class="at">x.points =</span> x[o])</span>
+<span id="cb60-12"><a href=""></a>  <span class="fu">mean</span>((y[o] <span class="sc">-</span> fit<span class="sc">$</span>y)<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb60-13"><a href=""></a>}</span>
+<span id="cb60-14"><a href=""></a></span>
+<span id="cb60-15"><a href=""></a>bandwidth_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fl">0.3</span>, <span class="dv">4</span>, <span class="at">by =</span> <span class="fl">0.1</span>)</span>
+<span id="cb60-16"><a href=""></a>cv_err <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(bandwidth_grid))</span>
+<span id="cb60-17"><a href=""></a>train_err <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(bandwidth_grid))</span>
+<span id="cb60-18"><a href=""></a><span class="cf">for</span> (j <span class="cf">in</span> <span class="fu">seq_along</span>(bandwidth_grid)) {</span>
+<span id="cb60-19"><a href=""></a>  cv_err[j] <span class="ot">&lt;-</span> <span class="fu">loo_cv</span>(bandwidth_grid[j], life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp)</span>
+<span id="cb60-20"><a href=""></a>  train_err[j] <span class="ot">&lt;-</span> <span class="fu">training_error</span>(bandwidth_grid[j], life<span class="sc">$</span>log_gdp, life<span class="sc">$</span>life_exp)</span>
+<span id="cb60-21"><a href=""></a>}</span>
+<span id="cb60-22"><a href=""></a></span>
+<span id="cb60-23"><a href=""></a>cv_results <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">bandwidth =</span> bandwidth_grid, <span class="st">`</span><span class="at">Cross-validation</span><span class="st">`</span> <span class="ot">=</span> cv_err, <span class="at">Training =</span> train_err)</span>
+<span id="cb60-24"><a href=""></a></span>
+<span id="cb60-25"><a href=""></a>b_cv <span class="ot">&lt;-</span> cv_results<span class="sc">$</span>bandwidth[<span class="fu">which.min</span>(cv_results<span class="sc">$</span><span class="st">`</span><span class="at">Cross-validation</span><span class="st">`</span>)]</span>
+<span id="cb60-26"><a href=""></a></span>
+<span id="cb60-27"><a href=""></a>cv_results <span class="sc">|&gt;</span></span>
+<span id="cb60-28"><a href=""></a>  <span class="fu">pivot_longer</span>(<span class="sc">-</span>bandwidth, <span class="at">names_to =</span> <span class="st">"error"</span>, <span class="at">values_to =</span> <span class="st">"mse"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb60-29"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> bandwidth, <span class="at">y =</span> mse, <span class="at">color =</span> error)) <span class="sc">+</span></span>
+<span id="cb60-30"><a href=""></a>  <span class="fu">geom_line</span>(<span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb60-31"><a href=""></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> b_cv, <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">+</span></span>
+<span id="cb60-32"><a href=""></a>  <span class="fu">labs</span>(<span class="at">y =</span> <span class="st">"Mean squared prediction error"</span>, <span class="at">color =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb60-33"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+</section>
+<section id="cross-validation-for-life-expectancy-predictions-output" class="slide level2 output-location-slide"><h2>Cross-validation for Life Expectancy Predictions</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-69-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="the-cross-validated-bandwidth" class="slide level2">
+<h2>The cross-validated bandwidth</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb61"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href=""></a>life <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
+<span id="cb61-2"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb61-3"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method, <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">bandwidth =</span> b_cv),</span>
+<span id="cb61-4"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb61-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+
+</div>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-70-1.png" width="960" class="r-stretch"></section>
+<section id="the-cross-validated-bandwidth-1" class="slide level2">
+<h2>The cross-validated bandwidth</h2>
+<ul>
+<li><p>Training error keeps falling as the bandwidth shrinks. Cross-validation error is U-shaped, with its minimum at <code>bandwidth =</code> 1.1, close to the <code>bandwidth = 1</code> we used earlier.</p></li>
+<li><p>For density estimates there is no <span class="math inline">y</span> to predict, but the same idea applies: <code>density(x, bw = "ucv")</code> chooses <span class="math inline">b</span> by cross-validation.</p></li>
+<li><p>Cross-validation picks the best bandwidth <em>for prediction</em>. For an exploratory plot, a bit more smoothing can make the main pattern easier to see.</p></li>
+</ul>
+</section>
+<section id="cross-validation-in-general" class="slide level2">
+<h2>Cross-Validation in General</h2>
+<ul>
+<li><p>Cross-validation is a general method for estimating prediction error and selecting tuning parameters in any predictive model.</p></li>
+<li><p>The optimal tuning parameters balance bias and variance to minimize prediction error.</p></li>
+<li><p>Extremely important in all of machine learning, where models are often highly flexible and prone to overfitting.</p></li>
+</ul>
+
+</section>
     </div>
   <div class="quarto-auto-generated-content" style="display: none;">
 <div class="footer footer-default">
@@ -1873,7 +2089,6 @@ samp |> ggplot() +
   <script src="density_and_smoothing_files/libs/revealjs/plugin/notes/notes.js"></script>
   <script src="density_and_smoothing_files/libs/revealjs/plugin/search/search.js"></script>
   <script src="density_and_smoothing_files/libs/revealjs/plugin/zoom/zoom.js"></script>
-  <script src="density_and_smoothing_files/libs/revealjs/plugin/math/math.js"></script>
   <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
 
   <script>
@@ -2041,27 +2256,9 @@ samp |> ggplot() +
         // Factor of the display size that should remain empty around the content
         margin: 0.1,
 
-        math: {
-          mathjax: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js',
-          config: 'TeX-AMS_HTML-full',
-          tex2jax: {
-            inlineMath: [['\\(','\\)']],
-            displayMath: [['\\[','\\]']],
-            balanceBraces: true,
-            processEscapes: false,
-            processRefs: true,
-            processEnvironments: true,
-            preview: 'TeX',
-            skipTags: ['script','noscript','style','textarea','pre','code'],
-            ignoreClass: 'tex2jax_ignore',
-            processClass: 'tex2jax_process'
-          },
-        },
-
         // reveal.js plugins
         plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
 
-          RevealMath,
           RevealNotes,
           RevealSearch,
           RevealZoom
