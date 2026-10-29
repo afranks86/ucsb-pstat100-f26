@@ -1049,7 +1049,8 @@ First 10 features:
 <section id="patchwork" class="slide level2">
 <h2>Patchwork</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href=""></a>pop_boxplot <span class="sc">+</span> pop_histogram</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href=""></a><span class="fu">library</span>(patchwork)</span>
+<span id="cb26-2"><a href=""></a>pop_boxplot <span class="sc">+</span> pop_histogram</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
 <img data-src="week4-visualization_files/figure-revealjs/unnamed-chunk-28-1.png" class="quarto-figure quarto-figure-center r-stretch" width="960"></section>
@@ -1469,7 +1470,7 @@ What do you notice? What can be done?
 <p>Create a new column which is the actual date the song achieved that rank:</p>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb47" data-code-line-numbers="4-5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href=""></a>billboard_long <span class="sc">|&gt;</span> </span>
-<span id="cb47-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Bruno Mars"</span>, <span class="st">"Creed"</span>, <span class="st">"Backstreet Boys, The"</span>, <span class="st">"Red Hot Chili Peppers"</span>)) <span class="sc">|&gt;</span> </span>
+<span id="cb47-2"><a href=""></a>  <span class="fu">filter</span>(artist <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"Jay-Z"</span>, <span class="st">"Aguilera, Christina"</span>, <span class="st">"Houston, Whitney"</span>)) <span class="sc">|&gt;</span> </span>
 <span id="cb47-3"><a href=""></a>  <span class="fu">drop_na</span>() <span class="sc">|&gt;</span></span>
 <span id="cb47-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">date =</span> date.entered <span class="sc">+</span> <span class="fu">weeks</span>(week)) <span class="sc">|&gt;</span></span>
 <span id="cb47-5"><a href=""></a>  <span class="fu">ggplot</span>() <span class="sc">+</span> <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">x=</span>date, <span class="at">y=</span>rank, <span class="at">col=</span>artist, <span class="at">group=</span>track)) <span class="sc">+</span></span>
