@@ -859,214 +859,6 @@ ggplot() +
 ```
 
 
-<!-- ## Mixture models
-
-KDE is a *nonparametric* technique: no population parameters are specified.
-
-Mixture models are a parametric alternative for density estimation. The Gaussian mixture model is: 
-$$
-f(x) = a_1 \varphi(x; \mu_1, \sigma_1) + \cdots + a_n \varphi(x; \mu_n, \sigma_n)
-$$
-
-* $f(x)$ is the distribution of interest
-* $\varphi(\cdot; \mu, \sigma)$ denotes a Gaussian density with mean $\mu$ and standard deviation $\sigma$
-* the model has $n$ components
-* $a_1, \dots, a_n$ are the mixing parameters 
-* fitted using the EM algorithm
-
-## Bivariate mixture model
-
-Let's fit a mixture to the joint distribution of environmental and economic sustainability indices:
-```{r}
-# Fit Gaussian Mixture Model
-gmm_fit <- Mclust(sust[, c("Env_Domain", "Econ_Domain")], 
-                  G = 2, modelNames = "VVV") # Number of clusters
-```
-
-We can inspect the estimated components' centers (means):
-
-```{r}
-# Extract centers
-centers <- gmm_fit$parameters$mean
-centers
-```
-
-And the mixing parameters:
-
-```{r}
-mixing_params <- gmm_fit$parameters$pro
-mixing_params
-```
-
-## Bivariate mixture model
-
-```{r}
-library(mvtnorm)
-# Calculate GMM density
-# Create grid for contour plotting
-
-x_grid <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
-y_grid <- seq(min(sust$Econ_Domain), max(sust$Econ_Domain), length.out = 100)
-grid_points <- expand.grid(x = x_grid, y = y_grid)
-
-l1 <- gmm_fit$parameters$variance$cholsigma[, , 1]
-l2 <- gmm_fit$parameters$variance$cholsigma[,, 2]
-sigma1 <- l1 %*% t(l1)
-sigma2 <- l2 %*% t(l2)
-
-component1_fn <- function(x) dmvnorm(x, mean = centers[, 1], 
-                                   sigma = sigma1)
-component2_fn <- function(x) dmvnorm(x, mean = centers[, 2],
-                                   sigma = sigma2)
-
-# Combined density function
-density_fn <- function(x) {
- mixing_params[1] * component1_fn(x) + mixing_params[2] * component2_fn(x)
-}
-
-z <- density_fn(grid_points)
-```
-
-## Bivariate mixture model
-
-```{r}
-#| output-location: slide
-ggplot() +
-  # Add contours
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
-                             z=mixing_params[1]*component1_fn(grid_points)),
-               aes(x = x, y = y, z = z)) +
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
-                             z=mixing_params[1]*component2_fn(grid_points)),
-               aes(x = x, y = y, z = z)) +
-  # Add original data points
-  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
-  theme_minimal()
-```
-
-## Bivariate mixture model
-```{r}
-#| output-location: slide
-# Create the plot
-ggplot() +
-  # Add contours
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, z=z),
-               aes(x = x, y = y, z = z)) +
-  # Add original data points
-  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
-  theme_minimal()
-
-
-  
-
-```
-## Pros and Cons
-
-KDE is a nonparametric method and is sometimes called a *memory-based* procedure: it uses all available data every time an estimated value is calculated.
-
-* Advantages: minimal assumptions, highly flexible
-* Disadvantages: not parsimonious, computationally intensive
-
-GMM's are *parametric* models.
-
-* Advantages: closed-form structure, good for multimodal distributions, various kinds of inference and prediction are possible
-* Disadvantages: estimation is less straightforward, may over-smooth, possible identifiability issues
-
-## GMMs for capturing subpopulations
-
-The GMM is especially useful if there are latent subpopulations in the data. Recall the simulated population of hawks:
-
-```{r}
-# Hawks example
-# Simulate data
-set.seed(40721)
-female_hawks <- tibble(
-  length = rnorm(3000, mean = 57.5, sd = 3),
-  sex = "female"
-)
-male_hawks <- tibble(
-  length = rnorm(2000, mean = 50.5, sd = 3),
-  sex = "male"
-)
-population_hawks <- bind_rows(female_hawks, male_hawks)
-```
-
-. . .
-
-Let's imagine we have a sample but without recorded sexes.
-
-```{r}
-# Sample without sex information
-set.seed(50223)
-samp <- population_hawks %>%
-  sample_n(500) %>%
-  dplyr::select(-sex)
-
-
-```
-
-## Hawks
-
-The histogram is not obviously bimodal, but we can suppose we're aware of the sex differences in length and just don't have that information.
-
-```{r}
-ggplot(samp, aes(x = length)) +
- geom_histogram(aes(y = after_stat(density)), 
-               binwidth = 2,
-               size = 20) + 
-  theme_bw(base_size=16)
-```
-
-## Recovering subpopulations
-
-If we fit a mixture model with two components, amazingly, the mixture components accurately recover the distributions for each sex, even though this was a latent (unobserved) variable:
-
-```{r}
-gmm_hawks <- Mclust(samp$length, G = 2)
-```
-```{r, echo=FALSE}
-# Compare components with subpopulations
-cat("gmm component means:", gmm_hawks$parameters$mean, "\n")
-cat("true population means by sex:", sort(tapply(population_hawks$length, population_hawks$sex, mean)), "\n")
-cat("------------------------------------------------\n")
-cat("gmm component variances:", gmm_hawks$parameters$variance$sigmasq, "\n") 
-cat("population variances by sex:", sort(tapply(population_hawks$length, population_hawks$sex, var)), "\n")
-```
-
-Note that the means and variances are estimated from the sample but compared with the population values above.
-
-## GMM density estimate
-
-Further, the density estimate fits reasonably well:
-
-```{r}
-#| output-location: slide
-x <- seq(min(samp$length), max(samp$length), length.out = 100)
-# Define component density functions
-p1 <- gmm_hawks$parameters$pro[1]
-p2 <- 1-p1
-
-component1_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[1], 
-                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[1]))
-component2_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[2], 
-                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[2]))
-
-# Combined density function
-density_fn <- function(x) {
- p1 * component1_fn(x) + p2 * component2_fn(x)
-}
-
-samp |> ggplot() + 
-  geom_histogram(aes(x=length, 
-                     y = after_stat(density)),
-                 bins=30,
-                 alpha=0.5) +
-  stat_function(fun = density_fn, col="dark green", size=1.2) + 
-  stat_function(fun = \(x) p1*component1_fn(x), size=1.2, col="red") +
-  stat_function(fun = \(x) p2*component2_fn(x), size=1.2, col="blue") +
-  xlim(c(40, 75)) + theme_minimal()
-```
--->
 
 ## Kernel smoothing
 
@@ -1175,7 +967,7 @@ life2 <- life |> filter(log_gdp > 8.5 | log_gdp < 7)
 life2 |> ggplot(aes(x = log_gdp, y = life_exp)) +
   geom_point() +
   geom_smooth(method = ksmooth_method,
-              method.args = list(kernel = "normal", bandwidth = 1),
+              method.args = list(kernel = "normal", bandwidth = 0.1),
               se = FALSE, color = "red", linewidth = 1.2) +
   theme_bw(base_size = 16)
 ```
@@ -1576,3 +1368,213 @@ life |> ggplot(aes(x = log_gdp, y = life_exp)) +
 * The optimal tuning parameters balance bias and variance to minimize prediction error.
 
 * Extremely important in all of machine learning, where models are often highly flexible and prone to overfitting.
+
+
+## Mixture models
+
+KDE is a *nonparametric* technique: no population parameters are specified.
+
+Mixture models are a parametric alternative for density estimation. The Gaussian mixture model is: 
+$$
+f(x) = a_1 \varphi(x; \mu_1, \sigma_1) + \cdots + a_n \varphi(x; \mu_n, \sigma_n)
+$$
+
+* $f(x)$ is the distribution of interest
+* $\varphi(\cdot; \mu, \sigma)$ denotes a Gaussian density with mean $\mu$ and standard deviation $\sigma$
+* the model has $n$ components
+* $a_1, \dots, a_n$ are the mixing parameters 
+* fitted using the EM algorithm
+
+## Bivariate mixture model
+
+Let's fit a mixture to the joint distribution of environmental and economic sustainability indices:
+```{r}
+# Fit Gaussian Mixture Model
+gmm_fit <- Mclust(sust[, c("Env_Domain", "Econ_Domain")], 
+                  G = 2, modelNames = "VVV") # Number of clusters
+```
+
+We can inspect the estimated components' centers (means):
+
+```{r}
+# Extract centers
+centers <- gmm_fit$parameters$mean
+centers
+```
+
+And the mixing parameters:
+
+```{r}
+mixing_params <- gmm_fit$parameters$pro
+mixing_params
+```
+
+## Bivariate mixture model
+
+```{r}
+library(mvtnorm)
+# Calculate GMM density
+# Create grid for contour plotting
+
+x_grid <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
+y_grid <- seq(min(sust$Econ_Domain), max(sust$Econ_Domain), length.out = 100)
+grid_points <- expand.grid(x = x_grid, y = y_grid)
+
+l1 <- gmm_fit$parameters$variance$cholsigma[, , 1]
+l2 <- gmm_fit$parameters$variance$cholsigma[,, 2]
+sigma1 <- l1 %*% t(l1)
+sigma2 <- l2 %*% t(l2)
+
+component1_fn <- function(x) dmvnorm(x, mean = centers[, 1], 
+                                   sigma = sigma1)
+component2_fn <- function(x) dmvnorm(x, mean = centers[, 2],
+                                   sigma = sigma2)
+
+# Combined density function
+density_fn <- function(x) {
+ mixing_params[1] * component1_fn(x) + mixing_params[2] * component2_fn(x)
+}
+
+z <- density_fn(grid_points)
+```
+
+## Bivariate mixture model
+
+```{r}
+#| output-location: slide
+ggplot() +
+  # Add contours
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
+                             z=mixing_params[1]*component1_fn(grid_points)),
+               aes(x = x, y = y, z = z)) +
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
+                             z=mixing_params[1]*component2_fn(grid_points)),
+               aes(x = x, y = y, z = z)) +
+  # Add original data points
+  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
+  theme_minimal()
+```
+
+## Bivariate mixture model
+```{r}
+#| output-location: slide
+# Create the plot
+ggplot() +
+  # Add contours
+  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, z=z),
+               aes(x = x, y = y, z = z)) +
+  # Add original data points
+  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
+  theme_minimal()
+
+
+  
+
+```
+
+## GMMs for capturing subpopulations
+
+The GMM is especially useful if there are latent subpopulations in the data. Recall the simulated population of hawks:
+
+```{r}
+# Hawks example
+# Simulate data
+set.seed(40721)
+female_hawks <- tibble(
+  length = rnorm(3000, mean = 57.5, sd = 3),
+  sex = "female"
+)
+male_hawks <- tibble(
+  length = rnorm(2000, mean = 50.5, sd = 3),
+  sex = "male"
+)
+population_hawks <- bind_rows(female_hawks, male_hawks)
+```
+
+. . .
+
+Let's imagine we have a sample but without recorded sexes.
+
+```{r}
+# Sample without sex information
+set.seed(50223)
+samp <- population_hawks %>%
+  sample_n(500) %>%
+  dplyr::select(-sex)
+
+
+```
+
+## Hawks
+
+The histogram is not obviously bimodal, but we can suppose we're aware of the sex differences in length and just don't have that information.
+
+```{r}
+ggplot(samp, aes(x = length)) +
+ geom_histogram(aes(y = after_stat(density)), 
+               binwidth = 2,
+               size = 20) + 
+  theme_bw(base_size=16)
+```
+
+## Recovering subpopulations
+
+If we fit a mixture model with two components, amazingly, the mixture components accurately recover the distributions for each sex, even though this was a latent (unobserved) variable:
+
+```{r}
+gmm_hawks <- Mclust(samp$length, G = 2)
+```
+```{r, echo=FALSE}
+# Compare components with subpopulations
+cat("gmm component means:", gmm_hawks$parameters$mean, "\n")
+cat("true population means by sex:", sort(tapply(population_hawks$length, population_hawks$sex, mean)), "\n")
+cat("------------------------------------------------\n")
+cat("gmm component variances:", gmm_hawks$parameters$variance$sigmasq, "\n") 
+cat("population variances by sex:", sort(tapply(population_hawks$length, population_hawks$sex, var)), "\n")
+```
+
+Note that the means and variances are estimated from the sample but compared with the population values above.
+
+## GMM density estimate
+
+Further, the density estimate fits reasonably well:
+
+```{r}
+#| output-location: slide
+x <- seq(min(samp$length), max(samp$length), length.out = 100)
+# Define component density functions
+p1 <- gmm_hawks$parameters$pro[1]
+p2 <- 1-p1
+
+component1_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[1], 
+                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[1]))
+component2_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[2], 
+                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[2]))
+
+# Combined density function
+density_fn <- function(x) {
+ p1 * component1_fn(x) + p2 * component2_fn(x)
+}
+
+samp |> ggplot() + 
+  geom_histogram(aes(x=length, 
+                     y = after_stat(density)),
+                 bins=30,
+                 alpha=0.5) +
+  stat_function(fun = density_fn, col="dark green", size=1.2) + 
+  stat_function(fun = \(x) p1*component1_fn(x), size=1.2, col="red") +
+  stat_function(fun = \(x) p2*component2_fn(x), size=1.2, col="blue") +
+  xlim(c(40, 75)) + theme_minimal()
+```
+
+## Kernel density estimation is a mixture model
+
+- KDE represents a mixture model where every individual data point $x_i$ serves as a component center.
+
+- Each of the $N$ observation gets equal mixture weight ($w_i = \frac{1}{N}$)
+
+- Finite mixture models (e.g., GMMs) learn variable component weights ($\pi_k$).
+
+- The kernel function $K(x - x_i)$ acts as the probability density function for each component centered at sample $x_i$.
+
+

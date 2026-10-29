@@ -1156,357 +1156,6 @@ b = 1.06 \times \hat \sigma \times n^{-1/5}
 <span id="cb40-3"><a href=""></a>  <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<!-- ## Mixture models
-
-KDE is a *nonparametric* technique: no population parameters are specified.
-
-Mixture models are a parametric alternative for density estimation. The Gaussian mixture model is: 
-$$
-f(x) = a_1 \varphi(x; \mu_1, \sigma_1) + \cdots + a_n \varphi(x; \mu_n, \sigma_n)
-$$
-
-* $f(x)$ is the distribution of interest
-* $\varphi(\cdot; \mu, \sigma)$ denotes a Gaussian density with mean $\mu$ and standard deviation $\sigma$
-* the model has $n$ components
-* $a_1, \dots, a_n$ are the mixing parameters 
-* fitted using the EM algorithm
-
-## Bivariate mixture model
-
-Let's fit a mixture to the joint distribution of environmental and economic sustainability indices:
-
-
-::: {.cell}
-
-```{.r .cell-code}
-# Fit Gaussian Mixture Model
-gmm_fit <- Mclust(sust[, c("Env_Domain", "Econ_Domain")], 
-                  G = 2, modelNames = "VVV") # Number of clusters
-```
-:::
-
-
-
-We can inspect the estimated components' centers (means):
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-# Extract centers
-centers <- gmm_fit$parameters$mean
-centers
-```
-
-::: {.cell-output .cell-output-stdout}
-
-```
-                 [,1]      [,2]
-Env_Domain  0.3898123 0.4406765
-Econ_Domain 0.4821943 0.4584829
-```
-
-
-:::
-:::
-
-
-
-And the mixing parameters:
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-mixing_params <- gmm_fit$parameters$pro
-mixing_params
-```
-
-::: {.cell-output .cell-output-stdout}
-
-```
-[1] 0.332702 0.667298
-```
-
-
-:::
-:::
-
-
-
-## Bivariate mixture model
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-library(mvtnorm)
-# Calculate GMM density
-# Create grid for contour plotting
-
-x_grid <- seq(min(sust$Env_Domain), max(sust$Env_Domain), length.out = 100)
-y_grid <- seq(min(sust$Econ_Domain), max(sust$Econ_Domain), length.out = 100)
-grid_points <- expand.grid(x = x_grid, y = y_grid)
-
-l1 <- gmm_fit$parameters$variance$cholsigma[, , 1]
-l2 <- gmm_fit$parameters$variance$cholsigma[,, 2]
-sigma1 <- l1 %*% t(l1)
-sigma2 <- l2 %*% t(l2)
-
-component1_fn <- function(x) dmvnorm(x, mean = centers[, 1], 
-                                   sigma = sigma1)
-component2_fn <- function(x) dmvnorm(x, mean = centers[, 2],
-                                   sigma = sigma2)
-
-# Combined density function
-density_fn <- function(x) {
- mixing_params[1] * component1_fn(x) + mixing_params[2] * component2_fn(x)
-}
-
-z <- density_fn(grid_points)
-```
-:::
-
-
-
-## Bivariate mixture model
-
-
-
-::: {.cell output-location='slide'}
-
-```{.r .cell-code}
-ggplot() +
-  # Add contours
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
-                             z=mixing_params[1]*component1_fn(grid_points)),
-               aes(x = x, y = y, z = z)) +
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, 
-                             z=mixing_params[1]*component2_fn(grid_points)),
-               aes(x = x, y = y, z = z)) +
-  # Add original data points
-  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
-  theme_minimal()
-```
-
-::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-42-1.png){width=960}
-:::
-:::
-
-
-
-## Bivariate mixture model
-
-
-::: {.cell output-location='slide'}
-
-```{.r .cell-code}
-# Create the plot
-ggplot() +
-  # Add contours
-  geom_contour(data = tibble(x=grid_points$x, y=grid_points$y, z=z),
-               aes(x = x, y = y, z = z)) +
-  # Add original data points
-  geom_point(data = sust, aes(x = Env_Domain, y = Econ_Domain), alpha = 0.5) +
-  theme_minimal()
-```
-
-::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-43-1.png){width=960}
-:::
-:::
-
-
-## Pros and Cons
-
-KDE is a nonparametric method and is sometimes called a *memory-based* procedure: it uses all available data every time an estimated value is calculated.
-
-* Advantages: minimal assumptions, highly flexible
-* Disadvantages: not parsimonious, computationally intensive
-
-GMM's are *parametric* models.
-
-* Advantages: closed-form structure, good for multimodal distributions, various kinds of inference and prediction are possible
-* Disadvantages: estimation is less straightforward, may over-smooth, possible identifiability issues
-
-## GMMs for capturing subpopulations
-
-The GMM is especially useful if there are latent subpopulations in the data. Recall the simulated population of hawks:
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-# Hawks example
-# Simulate data
-set.seed(40721)
-female_hawks <- tibble(
-  length = rnorm(3000, mean = 57.5, sd = 3),
-  sex = "female"
-)
-male_hawks <- tibble(
-  length = rnorm(2000, mean = 50.5, sd = 3),
-  sex = "male"
-)
-population_hawks <- bind_rows(female_hawks, male_hawks)
-```
-:::
-
-
-
-. . .
-
-Let's imagine we have a sample but without recorded sexes.
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-# Sample without sex information
-set.seed(50223)
-samp <- population_hawks %>%
-  sample_n(500) %>%
-  dplyr::select(-sex)
-```
-:::
-
-
-
-## Hawks
-
-The histogram is not obviously bimodal, but we can suppose we're aware of the sex differences in length and just don't have that information.
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-ggplot(samp, aes(x = length)) +
- geom_histogram(aes(y = after_stat(density)), 
-               binwidth = 2,
-               size = 20) + 
-  theme_bw(base_size=16)
-```
-
-::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-46-1.png){width=960}
-:::
-:::
-
-
-
-## Recovering subpopulations
-
-If we fit a mixture model with two components, amazingly, the mixture components accurately recover the distributions for each sex, even though this was a latent (unobserved) variable:
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-gmm_hawks <- Mclust(samp$length, G = 2)
-```
-:::
-
-::: {.cell}
-::: {.cell-output .cell-output-stdout}
-
-```
-gmm component means: 49.94219 57.42591 
-```
-
-
-:::
-
-::: {.cell-output .cell-output-stdout}
-
-```
-true population means by sex: 50.4776 57.5132 
-```
-
-
-:::
-
-::: {.cell-output .cell-output-stdout}
-
-```
-------------------------------------------------
-```
-
-
-:::
-
-::: {.cell-output .cell-output-stdout}
-
-```
-gmm component variances: 4.561484 9.177271 
-```
-
-
-:::
-
-::: {.cell-output .cell-output-stdout}
-
-```
-population variances by sex: 8.632019 8.867328 
-```
-
-
-:::
-:::
-
-
-
-Note that the means and variances are estimated from the sample but compared with the population values above.
-
-## GMM density estimate
-
-Further, the density estimate fits reasonably well:
-
-
-
-::: {.cell output-location='slide'}
-
-```{.r .cell-code}
-x <- seq(min(samp$length), max(samp$length), length.out = 100)
-# Define component density functions
-p1 <- gmm_hawks$parameters$pro[1]
-p2 <- 1-p1
-
-component1_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[1], 
-                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[1]))
-component2_fn <- function(x) dnorm(x, mean = gmm_hawks$parameters$mean[2], 
-                                   sd = sqrt(gmm_hawks$parameters$variance$sigmasq[2]))
-
-# Combined density function
-density_fn <- function(x) {
- p1 * component1_fn(x) + p2 * component2_fn(x)
-}
-
-samp |> ggplot() + 
-  geom_histogram(aes(x=length, 
-                     y = after_stat(density)),
-                 bins=30,
-                 alpha=0.5) +
-  stat_function(fun = density_fn, col="dark green", size=1.2) + 
-  stat_function(fun = \(x) p1*component1_fn(x), size=1.2, col="red") +
-  stat_function(fun = \(x) p2*component2_fn(x), size=1.2, col="blue") +
-  xlim(c(40, 75)) + theme_minimal()
-```
-
-::: {.cell-output-display}
-![](density_and_smoothing_files/figure-revealjs/unnamed-chunk-49-1.png){width=960}
-:::
-:::
-
-
--->
 <img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-37-1.png" width="960" class="r-stretch"></section>
 <section id="kernel-smoothing" class="slide level2">
 <h2>Kernel smoothing</h2>
@@ -1536,7 +1185,7 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-50-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-38-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1573,7 +1222,7 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-51-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-39-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1604,7 +1253,7 @@ samp |> ggplot() +
 <span id="cb44-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-53-1.png" width="960" class="r-stretch"><p>This is the same curve we computed with <code>ksmooth</code> at the start of this section. Keep <code>se = FALSE</code>, since the wrapper doesn’t compute standard errors.</p>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-41-1.png" width="960" class="r-stretch"><p>This is the same curve we computed with <code>ksmooth</code> at the start of this section. Keep <code>se = FALSE</code>, since the wrapper doesn’t compute standard errors.</p>
 </section>
 <section id="gaps-in-the-data" class="slide level2">
 <h2>Gaps in the data</h2>
@@ -1615,12 +1264,12 @@ samp |> ggplot() +
 <span id="cb45-3"><a href=""></a>life2 <span class="sc">|&gt;</span> <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> log_gdp, <span class="at">y =</span> life_exp)) <span class="sc">+</span></span>
 <span id="cb45-4"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
 <span id="cb45-5"><a href=""></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> ksmooth_method,</span>
-<span id="cb45-6"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="dv">1</span>),</span>
+<span id="cb45-6"><a href=""></a>              <span class="at">method.args =</span> <span class="fu">list</span>(<span class="at">kernel =</span> <span class="st">"normal"</span>, <span class="at">bandwidth =</span> <span class="fl">0.1</span>),</span>
 <span id="cb45-7"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
 <span id="cb45-8"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-54-1.png" width="960" class="r-stretch"><p>Inside the gap, the smooth is a weighted average of the nearest points on either side, so it draws a smooth curve where there are no observations at all.</p>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-42-1.png" width="960" class="r-stretch"><p>Inside the gap, the smooth is a weighted average of the nearest points on either side, so it draws a smooth curve where there are no observations at all.</p>
 </section>
 <section id="example-wavy-turbans-at-the-beach" class="slide level2">
 <h2>Example: Wavy Turban’s at the beach</h2>
@@ -1695,7 +1344,7 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-56-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-44-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1737,7 +1386,7 @@ samp |> ggplot() +
 <span id="cb51-3"><a href=""></a>  <span class="fu">geom_line</span>() <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-58-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-46-1.png" width="960" class="r-stretch"></section>
 <section id="smoothing-wavy-turban-counts" class="slide level2">
 <h2>Smoothing Wavy Turban Counts</h2>
 <div class="cell">
@@ -1754,7 +1403,7 @@ samp |> ggplot() +
 <span id="cb52-11"><a href=""></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y=</span>preds), <span class="at">col=</span><span class="st">"red"</span>, <span class="at">size=</span><span class="fl">1.2</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>) </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-59-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-47-1.png" width="960" class="r-stretch"></section>
 <section id="residuals" class="slide level2">
 <h2>Residuals</h2>
 <div class="cell">
@@ -1766,7 +1415,7 @@ samp |> ggplot() +
 <span id="cb53-6"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-60-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-48-1.png" width="960" class="r-stretch"></section>
 <section id="percent-change" class="slide level2">
 <h2>Percent Change</h2>
 <div class="cell">
@@ -1779,7 +1428,7 @@ samp |> ggplot() +
 <span id="cb54-7"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-61-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-49-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <div class="cell">
@@ -1790,7 +1439,7 @@ samp |> ggplot() +
 <span id="cb55-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-62-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-50-1.png" width="960" class="r-stretch"></section>
 <section id="percent-change-by-month" class="slide level2">
 <h2>Percent Change by Month</h2>
 <div class="cell">
@@ -1801,7 +1450,7 @@ samp |> ggplot() +
 <span id="cb56-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept=</span><span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-63-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-51-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month-1" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <div class="cell">
@@ -1811,7 +1460,7 @@ samp |> ggplot() +
 <span id="cb57-4"><a href=""></a>              <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"blue"</span>) <span class="sc">+</span> <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-64-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-52-1.png" width="960" class="r-stretch"></section>
 <section id="median-percent-change-by-month-2" class="slide level2">
 <h2>Median Percent Change by Month</h2>
 <p>Smooth again!</p>
@@ -1823,12 +1472,12 @@ samp |> ggplot() +
 <span id="cb58-5"><a href=""></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="dv">0</span>, <span class="at">linetype=</span><span class="st">"dashed"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-65-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-53-1.png" width="960" class="r-stretch"></section>
 <section id="bandwidth-in-density-estimation" class="slide level2">
 <h2>Bandwidth in density estimation</h2>
 <p>The bandwidth parameter <span class="math inline">b</span> controls how wiggly the KDE curve is.</p>
 
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-66-1.png" width="960" class="r-stretch"><p>The choice of smoothing bandwidth can change the visual impression.</p>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-54-1.png" width="960" class="r-stretch"><p>The choice of smoothing bandwidth can change the visual impression.</p>
 <ul>
 <li>too much smoothing can obscure outliers and multiple modes</li>
 <li>too little smoothing can misleadingly overemphasize sample artefacts</li>
@@ -1862,7 +1511,7 @@ samp |> ggplot() +
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-67-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-55-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -1884,7 +1533,7 @@ samp |> ggplot() +
 <h2>Bias–variance tradeoff</h2>
 <p>Three samples of 30 points from the same curve (dashed red), each smoothed with a small and a large bandwidth (blue):</p>
 
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-68-1.png" width="1056" class="r-stretch"><ul>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-56-1.png" width="1056" class="r-stretch"><ul>
 <li>Top row: the curves differ a lot from sample to sample. High variance.</li>
 <li>Bottom row: the curves agree with each other, but all of them miss the curvature. High bias.</li>
 </ul>
@@ -2037,7 +1686,7 @@ CV(b) = \frac{1}{k}\sum_{j=1}^k \sum_{i\in V_j} (\hat{y}_{(i)} - y_i)^2
 <div class="cell-output-display">
 <div>
 <figure>
-<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-69-1.png" width="960"></p>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-57-1.png" width="960"></p>
 </figure>
 </div>
 </div>
@@ -2051,7 +1700,7 @@ CV(b) = \frac{1}{k}\sum_{j=1}^k \sum_{i\in V_j} (\hat{y}_{(i)} - y_i)^2
 <span id="cb61-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 </div>
-<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-70-1.png" width="960" class="r-stretch"></section>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-58-1.png" width="960" class="r-stretch"></section>
 <section id="the-cross-validated-bandwidth-1" class="slide level2">
 <h2>The cross-validated bandwidth</h2>
 <ul>
@@ -2066,6 +1715,237 @@ CV(b) = \frac{1}{k}\sum_{j=1}^k \sum_{i\in V_j} (\hat{y}_{(i)} - y_i)^2
 <li><p>Cross-validation is a general method for estimating prediction error and selecting tuning parameters in any predictive model.</p></li>
 <li><p>The optimal tuning parameters balance bias and variance to minimize prediction error.</p></li>
 <li><p>Extremely important in all of machine learning, where models are often highly flexible and prone to overfitting.</p></li>
+</ul>
+</section>
+<section id="mixture-models" class="slide level2">
+<h2>Mixture models</h2>
+<p>KDE is a <em>nonparametric</em> technique: no population parameters are specified.</p>
+<p>Mixture models are a parametric alternative for density estimation. The Gaussian mixture model is: <span class="math display">
+f(x) = a_1 \varphi(x; \mu_1, \sigma_1) + \cdots + a_n \varphi(x; \mu_n, \sigma_n)
+</span></p>
+<ul>
+<li><span class="math inline">f(x)</span> is the distribution of interest</li>
+<li><span class="math inline">\varphi(\cdot; \mu, \sigma)</span> denotes a Gaussian density with mean <span class="math inline">\mu</span> and standard deviation <span class="math inline">\sigma</span></li>
+<li>the model has <span class="math inline">n</span> components</li>
+<li><span class="math inline">a_1, \dots, a_n</span> are the mixing parameters</li>
+<li>fitted using the EM algorithm</li>
+</ul>
+</section>
+<section id="bivariate-mixture-model" class="slide level2">
+<h2>Bivariate mixture model</h2>
+<p>Let’s fit a mixture to the joint distribution of environmental and economic sustainability indices:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href=""></a><span class="co"># Fit Gaussian Mixture Model</span></span>
+<span id="cb62-2"><a href=""></a>gmm_fit <span class="ot">&lt;-</span> <span class="fu">Mclust</span>(sust[, <span class="fu">c</span>(<span class="st">"Env_Domain"</span>, <span class="st">"Econ_Domain"</span>)], </span>
+<span id="cb62-3"><a href=""></a>                  <span class="at">G =</span> <span class="dv">2</span>, <span class="at">modelNames =</span> <span class="st">"VVV"</span>) <span class="co"># Number of clusters</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We can inspect the estimated components’ centers (means):</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb63"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href=""></a><span class="co"># Extract centers</span></span>
+<span id="cb63-2"><a href=""></a>centers <span class="ot">&lt;-</span> gmm_fit<span class="sc">$</span>parameters<span class="sc">$</span>mean</span>
+<span id="cb63-3"><a href=""></a>centers</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>                 [,1]      [,2]
+Env_Domain  0.3898123 0.4406765
+Econ_Domain 0.4821943 0.4584829</code></pre>
+</div>
+</div>
+<p>And the mixing parameters:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb65"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href=""></a>mixing_params <span class="ot">&lt;-</span> gmm_fit<span class="sc">$</span>parameters<span class="sc">$</span>pro</span>
+<span id="cb65-2"><a href=""></a>mixing_params</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 0.332702 0.667298</code></pre>
+</div>
+</div>
+</section>
+<section id="bivariate-mixture-model-1" class="slide level2">
+<h2>Bivariate mixture model</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb67"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href=""></a><span class="fu">library</span>(mvtnorm)</span>
+<span id="cb67-2"><a href=""></a><span class="co"># Calculate GMM density</span></span>
+<span id="cb67-3"><a href=""></a><span class="co"># Create grid for contour plotting</span></span>
+<span id="cb67-4"><a href=""></a></span>
+<span id="cb67-5"><a href=""></a>x_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Env_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Env_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb67-6"><a href=""></a>y_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(sust<span class="sc">$</span>Econ_Domain), <span class="fu">max</span>(sust<span class="sc">$</span>Econ_Domain), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb67-7"><a href=""></a>grid_points <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">x =</span> x_grid, <span class="at">y =</span> y_grid)</span>
+<span id="cb67-8"><a href=""></a></span>
+<span id="cb67-9"><a href=""></a>l1 <span class="ot">&lt;-</span> gmm_fit<span class="sc">$</span>parameters<span class="sc">$</span>variance<span class="sc">$</span>cholsigma[, , <span class="dv">1</span>]</span>
+<span id="cb67-10"><a href=""></a>l2 <span class="ot">&lt;-</span> gmm_fit<span class="sc">$</span>parameters<span class="sc">$</span>variance<span class="sc">$</span>cholsigma[,, <span class="dv">2</span>]</span>
+<span id="cb67-11"><a href=""></a>sigma1 <span class="ot">&lt;-</span> l1 <span class="sc">%*%</span> <span class="fu">t</span>(l1)</span>
+<span id="cb67-12"><a href=""></a>sigma2 <span class="ot">&lt;-</span> l2 <span class="sc">%*%</span> <span class="fu">t</span>(l2)</span>
+<span id="cb67-13"><a href=""></a></span>
+<span id="cb67-14"><a href=""></a>component1_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">dmvnorm</span>(x, <span class="at">mean =</span> centers[, <span class="dv">1</span>], </span>
+<span id="cb67-15"><a href=""></a>                                   <span class="at">sigma =</span> sigma1)</span>
+<span id="cb67-16"><a href=""></a>component2_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">dmvnorm</span>(x, <span class="at">mean =</span> centers[, <span class="dv">2</span>],</span>
+<span id="cb67-17"><a href=""></a>                                   <span class="at">sigma =</span> sigma2)</span>
+<span id="cb67-18"><a href=""></a></span>
+<span id="cb67-19"><a href=""></a><span class="co"># Combined density function</span></span>
+<span id="cb67-20"><a href=""></a>density_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb67-21"><a href=""></a> mixing_params[<span class="dv">1</span>] <span class="sc">*</span> <span class="fu">component1_fn</span>(x) <span class="sc">+</span> mixing_params[<span class="dv">2</span>] <span class="sc">*</span> <span class="fu">component2_fn</span>(x)</span>
+<span id="cb67-22"><a href=""></a>}</span>
+<span id="cb67-23"><a href=""></a></span>
+<span id="cb67-24"><a href=""></a>z <span class="ot">&lt;-</span> <span class="fu">density_fn</span>(grid_points)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="bivariate-mixture-model-2" class="slide level2">
+<h2>Bivariate mixture model</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb68"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb68-1"><a href=""></a><span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb68-2"><a href=""></a>  <span class="co"># Add contours</span></span>
+<span id="cb68-3"><a href=""></a>  <span class="fu">geom_contour</span>(<span class="at">data =</span> <span class="fu">tibble</span>(<span class="at">x=</span>grid_points<span class="sc">$</span>x, <span class="at">y=</span>grid_points<span class="sc">$</span>y, </span>
+<span id="cb68-4"><a href=""></a>                             <span class="at">z=</span>mixing_params[<span class="dv">1</span>]<span class="sc">*</span><span class="fu">component1_fn</span>(grid_points)),</span>
+<span id="cb68-5"><a href=""></a>               <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">z =</span> z)) <span class="sc">+</span></span>
+<span id="cb68-6"><a href=""></a>  <span class="fu">geom_contour</span>(<span class="at">data =</span> <span class="fu">tibble</span>(<span class="at">x=</span>grid_points<span class="sc">$</span>x, <span class="at">y=</span>grid_points<span class="sc">$</span>y, </span>
+<span id="cb68-7"><a href=""></a>                             <span class="at">z=</span>mixing_params[<span class="dv">1</span>]<span class="sc">*</span><span class="fu">component2_fn</span>(grid_points)),</span>
+<span id="cb68-8"><a href=""></a>               <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">z =</span> z)) <span class="sc">+</span></span>
+<span id="cb68-9"><a href=""></a>  <span class="co"># Add original data points</span></span>
+<span id="cb68-10"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> sust, <span class="fu">aes</span>(<span class="at">x =</span> Env_Domain, <span class="at">y =</span> Econ_Domain), <span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb68-11"><a href=""></a>  <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+</section>
+<section id="bivariate-mixture-model-2-output" class="slide level2 output-location-slide"><h2>Bivariate mixture model</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-63-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="bivariate-mixture-model-3" class="slide level2">
+<h2>Bivariate mixture model</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb69"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb69-1"><a href=""></a><span class="co"># Create the plot</span></span>
+<span id="cb69-2"><a href=""></a><span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb69-3"><a href=""></a>  <span class="co"># Add contours</span></span>
+<span id="cb69-4"><a href=""></a>  <span class="fu">geom_contour</span>(<span class="at">data =</span> <span class="fu">tibble</span>(<span class="at">x=</span>grid_points<span class="sc">$</span>x, <span class="at">y=</span>grid_points<span class="sc">$</span>y, <span class="at">z=</span>z),</span>
+<span id="cb69-5"><a href=""></a>               <span class="fu">aes</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">z =</span> z)) <span class="sc">+</span></span>
+<span id="cb69-6"><a href=""></a>  <span class="co"># Add original data points</span></span>
+<span id="cb69-7"><a href=""></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> sust, <span class="fu">aes</span>(<span class="at">x =</span> Env_Domain, <span class="at">y =</span> Econ_Domain), <span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb69-8"><a href=""></a>  <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+</section>
+<section id="bivariate-mixture-model-3-output" class="slide level2 output-location-slide"><h2>Bivariate mixture model</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-64-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="gmms-for-capturing-subpopulations" class="slide level2">
+<h2>GMMs for capturing subpopulations</h2>
+<p>The GMM is especially useful if there are latent subpopulations in the data. Recall the simulated population of hawks:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb70"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb70-1"><a href=""></a><span class="co"># Hawks example</span></span>
+<span id="cb70-2"><a href=""></a><span class="co"># Simulate data</span></span>
+<span id="cb70-3"><a href=""></a><span class="fu">set.seed</span>(<span class="dv">40721</span>)</span>
+<span id="cb70-4"><a href=""></a>female_hawks <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
+<span id="cb70-5"><a href=""></a>  <span class="at">length =</span> <span class="fu">rnorm</span>(<span class="dv">3000</span>, <span class="at">mean =</span> <span class="fl">57.5</span>, <span class="at">sd =</span> <span class="dv">3</span>),</span>
+<span id="cb70-6"><a href=""></a>  <span class="at">sex =</span> <span class="st">"female"</span></span>
+<span id="cb70-7"><a href=""></a>)</span>
+<span id="cb70-8"><a href=""></a>male_hawks <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
+<span id="cb70-9"><a href=""></a>  <span class="at">length =</span> <span class="fu">rnorm</span>(<span class="dv">2000</span>, <span class="at">mean =</span> <span class="fl">50.5</span>, <span class="at">sd =</span> <span class="dv">3</span>),</span>
+<span id="cb70-10"><a href=""></a>  <span class="at">sex =</span> <span class="st">"male"</span></span>
+<span id="cb70-11"><a href=""></a>)</span>
+<span id="cb70-12"><a href=""></a>population_hawks <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(female_hawks, male_hawks)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="fragment">
+<p>Let’s imagine we have a sample but without recorded sexes.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb71"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href=""></a><span class="co"># Sample without sex information</span></span>
+<span id="cb71-2"><a href=""></a><span class="fu">set.seed</span>(<span class="dv">50223</span>)</span>
+<span id="cb71-3"><a href=""></a>samp <span class="ot">&lt;-</span> population_hawks <span class="sc">%&gt;%</span></span>
+<span id="cb71-4"><a href=""></a>  <span class="fu">sample_n</span>(<span class="dv">500</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb71-5"><a href=""></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="sc">-</span>sex)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</section>
+<section id="hawks" class="slide level2">
+<h2>Hawks</h2>
+<p>The histogram is not obviously bimodal, but we can suppose we’re aware of the sex differences in length and just don’t have that information.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb72"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb72-1"><a href=""></a><span class="fu">ggplot</span>(samp, <span class="fu">aes</span>(<span class="at">x =</span> length)) <span class="sc">+</span></span>
+<span id="cb72-2"><a href=""></a> <span class="fu">geom_histogram</span>(<span class="fu">aes</span>(<span class="at">y =</span> <span class="fu">after_stat</span>(density)), </span>
+<span id="cb72-3"><a href=""></a>               <span class="at">binwidth =</span> <span class="dv">2</span>,</span>
+<span id="cb72-4"><a href=""></a>               <span class="at">size =</span> <span class="dv">20</span>) <span class="sc">+</span> </span>
+<span id="cb72-5"><a href=""></a>  <span class="fu">theme_bw</span>(<span class="at">base_size=</span><span class="dv">16</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+
+</div>
+<img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-67-1.png" width="960" class="r-stretch"></section>
+<section id="recovering-subpopulations" class="slide level2">
+<h2>Recovering subpopulations</h2>
+<p>If we fit a mixture model with two components, amazingly, the mixture components accurately recover the distributions for each sex, even though this was a latent (unobserved) variable:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb73"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb73-1"><a href=""></a>gmm_hawks <span class="ot">&lt;-</span> <span class="fu">Mclust</span>(samp<span class="sc">$</span>length, <span class="at">G =</span> <span class="dv">2</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code>gmm component means: 49.94219 57.42591 </code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>true population means by sex: 50.4776 57.5132 </code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>------------------------------------------------</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>gmm component variances: 4.561484 9.177271 </code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>population variances by sex: 8.632019 8.867328 </code></pre>
+</div>
+</div>
+<p>Note that the means and variances are estimated from the sample but compared with the population values above.</p>
+</section>
+<section id="gmm-density-estimate" class="slide level2">
+<h2>GMM density estimate</h2>
+<p>Further, the density estimate fits reasonably well:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb79"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb79-1"><a href=""></a>x <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(samp<span class="sc">$</span>length), <span class="fu">max</span>(samp<span class="sc">$</span>length), <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb79-2"><a href=""></a><span class="co"># Define component density functions</span></span>
+<span id="cb79-3"><a href=""></a>p1 <span class="ot">&lt;-</span> gmm_hawks<span class="sc">$</span>parameters<span class="sc">$</span>pro[<span class="dv">1</span>]</span>
+<span id="cb79-4"><a href=""></a>p2 <span class="ot">&lt;-</span> <span class="dv">1</span><span class="sc">-</span>p1</span>
+<span id="cb79-5"><a href=""></a></span>
+<span id="cb79-6"><a href=""></a>component1_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> gmm_hawks<span class="sc">$</span>parameters<span class="sc">$</span>mean[<span class="dv">1</span>], </span>
+<span id="cb79-7"><a href=""></a>                                   <span class="at">sd =</span> <span class="fu">sqrt</span>(gmm_hawks<span class="sc">$</span>parameters<span class="sc">$</span>variance<span class="sc">$</span>sigmasq[<span class="dv">1</span>]))</span>
+<span id="cb79-8"><a href=""></a>component2_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">dnorm</span>(x, <span class="at">mean =</span> gmm_hawks<span class="sc">$</span>parameters<span class="sc">$</span>mean[<span class="dv">2</span>], </span>
+<span id="cb79-9"><a href=""></a>                                   <span class="at">sd =</span> <span class="fu">sqrt</span>(gmm_hawks<span class="sc">$</span>parameters<span class="sc">$</span>variance<span class="sc">$</span>sigmasq[<span class="dv">2</span>]))</span>
+<span id="cb79-10"><a href=""></a></span>
+<span id="cb79-11"><a href=""></a><span class="co"># Combined density function</span></span>
+<span id="cb79-12"><a href=""></a>density_fn <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb79-13"><a href=""></a> p1 <span class="sc">*</span> <span class="fu">component1_fn</span>(x) <span class="sc">+</span> p2 <span class="sc">*</span> <span class="fu">component2_fn</span>(x)</span>
+<span id="cb79-14"><a href=""></a>}</span>
+<span id="cb79-15"><a href=""></a></span>
+<span id="cb79-16"><a href=""></a>samp <span class="sc">|&gt;</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
+<span id="cb79-17"><a href=""></a>  <span class="fu">geom_histogram</span>(<span class="fu">aes</span>(<span class="at">x=</span>length, </span>
+<span id="cb79-18"><a href=""></a>                     <span class="at">y =</span> <span class="fu">after_stat</span>(density)),</span>
+<span id="cb79-19"><a href=""></a>                 <span class="at">bins=</span><span class="dv">30</span>,</span>
+<span id="cb79-20"><a href=""></a>                 <span class="at">alpha=</span><span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb79-21"><a href=""></a>  <span class="fu">stat_function</span>(<span class="at">fun =</span> density_fn, <span class="at">col=</span><span class="st">"dark green"</span>, <span class="at">size=</span><span class="fl">1.2</span>) <span class="sc">+</span> </span>
+<span id="cb79-22"><a href=""></a>  <span class="fu">stat_function</span>(<span class="at">fun =</span> \(x) p1<span class="sc">*</span><span class="fu">component1_fn</span>(x), <span class="at">size=</span><span class="fl">1.2</span>, <span class="at">col=</span><span class="st">"red"</span>) <span class="sc">+</span></span>
+<span id="cb79-23"><a href=""></a>  <span class="fu">stat_function</span>(<span class="at">fun =</span> \(x) p2<span class="sc">*</span><span class="fu">component2_fn</span>(x), <span class="at">size=</span><span class="fl">1.2</span>, <span class="at">col=</span><span class="st">"blue"</span>) <span class="sc">+</span></span>
+<span id="cb79-24"><a href=""></a>  <span class="fu">xlim</span>(<span class="fu">c</span>(<span class="dv">40</span>, <span class="dv">75</span>)) <span class="sc">+</span> <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+
+</section>
+<section id="gmm-density-estimate-output" class="slide level2 output-location-slide"><h2>GMM density estimate</h2><div class="cell output-location-slide">
+<div class="cell-output-display">
+<div>
+<figure>
+<p><img data-src="density_and_smoothing_files/figure-revealjs/unnamed-chunk-70-1.png" width="960"></p>
+</figure>
+</div>
+</div>
+</div></section><section id="kernel-density-estimation-is-a-mixture-model" class="slide level2">
+<h2>Kernel density estimation is a mixture model</h2>
+<ul>
+<li><p>KDE represents a mixture model where every individual data point <span class="math inline">x_i</span> serves as a component center.</p></li>
+<li><p>Each of the <span class="math inline">N</span> observation gets equal mixture weight (<span class="math inline">w_i = \frac{1}{N}</span>)</p></li>
+<li><p>Finite mixture models (e.g., GMMs) learn variable component weights (<span class="math inline">\pi_k</span>).</p></li>
+<li><p>The kernel function <span class="math inline">K(x - x_i)</span> acts as the probability density function for each component centered at sample <span class="math inline">x_i</span>.</p></li>
 </ul>
 
 </section>
