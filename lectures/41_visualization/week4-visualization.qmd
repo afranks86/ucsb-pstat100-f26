@@ -4,9 +4,9 @@ format:
   revealjs:
     theme: default
     slide-number: true
-    chalkboard: true
     preview-links: auto
     scrollable: true
+    embed-resources: true
 html-math-method: mathjax
 ---
 
@@ -891,6 +891,7 @@ africa_data |>
 ## Patchwork
 
 ```{r, echo=TRUE}
+library(patchwork)
 pop_boxplot + pop_histogram
 ```
 
@@ -1273,7 +1274,7 @@ Create a new column which is the actual date the song achieved that rank:
 #| output-location: slide
 #| code-line-numbers: "4-5"
 billboard_long |> 
-  filter(artist %in% c("Bruno Mars", "Creed", "Backstreet Boys, The", "Red Hot Chili Peppers")) |> 
+  filter(artist %in% c("Jay-Z", "Aguilera, Christina", "Houston, Whitney")) |> 
   drop_na() |>
   mutate(date = date.entered + weeks(week)) |>
   ggplot() + geom_line(aes(x=date, y=rank, col=artist, group=track)) +
