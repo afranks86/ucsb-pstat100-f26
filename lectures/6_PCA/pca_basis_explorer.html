@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>PCA Basis Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;1,400;1,600&display=swap">
+<style>
+/* Layout: same lab-instrument console as the Kernel Window Explorer. Plot stage on the left (the data in its original coordinates
+   beside the same data in the rotated basis, a variance diagnostic underneath, matrices and R code last), control rail on the right
+   with the live variance budget. Color is reserved for the basis: blue = u1, orange = u2, green = u3. Points stay neutral ink. */
+:root{
+  --bg:#eef1f3;
+  --surface:#fbfcfc;
+  --ink:#13171b;
+  --ink-2:#4b535b;
+  --muted:#7f878f;
+  --line:#d9dee2;
+  --grid:#e9ecef;
+  --axis:#b6bec5;
+  --chip:#e4e8eb;
+  --pt:#2b3238;
+  --pin:#5b636b;
+  --u1:#2a78d6;
+  --u2:#eb6834;
+  --u3:#17a070;
+  --good:#1d6e46;
+  --good-bg:#e1f2e8;
+  --font-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-math:"STIX Two Text", "Cambria Math", "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0e10; --surface:#14171a; --ink:#eef1f3; --ink-2:#b7bec5; --muted:#868e96; --line:#272c31; --grid:#1f2428;
+    --axis:#3a4148; --chip:#22272c; --pt:#c9d0d6; --pin:#a3abb3; --u1:#3987e5; --u2:#e0652f; --u3:#1fae7c;
+    --good:#6fd39c; --good-bg:#15301f; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c0e10; --surface:#14171a; --ink:#eef1f3; --ink-2:#b7bec5; --muted:#868e96; --line:#272c31; --grid:#1f2428;
+  --axis:#3a4148; --chip:#22272c; --pt:#c9d0d6; --pin:#a3abb3; --u1:#3987e5; --u2:#e0652f; --u3:#1fae7c;
+  --good:#6fd39c; --good-bg:#15301f; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:14px 22px;
+}
+.app{max-width:1260px; margin:0 auto; display:grid; gap:12px}
+header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:10px 24px}
+.titles{min-width:0; display:grid; gap:2px}
+h1{margin:0; font-size:21px; font-weight:600; letter-spacing:-0.01em; text-wrap:balance}
+h1 .course{font-family:var(--font-mono); font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-left:8px; vertical-align:3px}
+.sub{margin:0; color:var(--ink-2); font-size:13px; max-width:82ch}
+body.compact .sub, body.compact h1 .course{display:none}
+.m{font-family:var(--font-math); font-style:italic; font-size:1.08em}
+.mb{font-family:var(--font-math); font-weight:600; font-style:normal}
+.seg{display:inline-flex; background:var(--chip); border-radius:8px; padding:3px; gap:2px; flex-wrap:wrap}
+.seg button{border:0; background:transparent; color:var(--ink-2); font:500 13px/1.2 var(--font-ui); padding:7px 13px; border-radius:6px; cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.08)}
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible{outline:2px solid var(--u1); outline-offset:2px}
+
+.workspace{display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:12px; align-items:start}
+@media (max-width:920px){.workspace{grid-template-columns:minmax(0,1fr)}}
+.stage, .rail{background:var(--surface); border:1px solid var(--line); border-radius:10px}
+.stage{padding:12px 12px 14px; display:grid; gap:12px; min-width:0}
+.rail{padding:14px; display:grid; gap:18px; min-width:0}
+
+.legend{display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--ink-2); min-height:18px}
+.li{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.sw{display:inline-block; flex:none}
+.sw.dot{width:7px; height:7px; border-radius:50%; background:var(--pt); opacity:.6}
+.sw.arrow{position:relative; width:20px; height:2px; background:var(--c); margin-right:4px}
+.sw.arrow::after{content:""; position:absolute; right:-5px; top:-4px; border-left:7px solid var(--c); border-top:5px solid transparent; border-bottom:5px solid transparent}
+.sw.dash{width:20px; border-top:2px dashed var(--pin)}
+.sw.seg2{width:18px; border-top:1px solid color-mix(in srgb, var(--u2) 55%, transparent)}
+.sw.plane{width:16px; height:11px; border:1px solid var(--axis); background:color-mix(in srgb, var(--ink) 7%, transparent)}
+.sw.line{width:20px; border-top:2px solid var(--c)}
+.sw.line.dashed{border-top-style:dashed}
+
+.panels{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px}
+@media (max-width:640px){.panels{grid-template-columns:minmax(0,1fr)}}
+figure.panel{margin:0; display:grid; gap:4px; min-width:0}
+figcaption{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:2px 12px; font-size:12.5px}
+.ptitle{font-weight:600; color:var(--ink)}
+.hint{color:var(--muted); font-size:12px}
+.plotwrap{position:relative; min-width:0}
+canvas{display:block; width:100%}
+#cvMain, #cvScore{aspect-ratio:8/7; touch-action:none}
+#cvMain{cursor:crosshair}
+#cvMain.orbit{cursor:grab}
+#cvMain.orbit.dragging{cursor:grabbing}
+.tip{position:absolute; pointer-events:none; z-index:2; background:var(--surface); color:var(--ink); border:1px solid var(--line);
+  box-shadow:0 4px 14px rgba(0,0,0,.14); border-radius:6px; padding:7px 9px; font-size:12px; line-height:1.4; max-width:280px}
+.tip b{font-weight:600; display:block; margin-bottom:2px}
+.tip .num{display:block; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-2); font-variant-numeric:tabular-nums}
+
+
+.readout{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:14px 20px; border-top:1px solid var(--line); padding-top:12px}
+.block{display:grid; gap:7px; align-content:start; min-width:0}
+.block.wide{grid-column:1 / -1}
+.eyebrow{font-family:var(--font-mono); font-size:10.5px; font-weight:500; letter-spacing:.09em; text-transform:uppercase; color:var(--muted)}
+table.mat{border-collapse:separate; border-spacing:2px; font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums}
+table.mat th{font-weight:500; color:var(--muted); font-size:11px; padding:2px 6px; text-align:right}
+table.mat th.rh{text-align:left}
+table.mat td{padding:4px 7px; text-align:right; border-radius:3px; background:color-mix(in srgb, var(--ink) var(--a, 0%), transparent); color:var(--ink); min-width:6ch}
+table.mat td.diag{background:color-mix(in srgb, var(--c) 16%, transparent)}
+.status{display:inline-flex; align-items:center; gap:6px; font-size:12px; line-height:1.35; padding:5px 9px; border-radius:6px; background:var(--chip); color:var(--ink-2); justify-self:start}
+.status.good{background:var(--good-bg); color:var(--good); font-weight:500}
+.status .ic{font-family:var(--font-mono); font-weight:600}
+.loads{display:grid; gap:8px; min-width:0}
+.loads .tabs{display:flex; flex-wrap:wrap; gap:6px 14px}
+.loads table.mat th .sw.line{width:10px; border-top-width:3px; margin-right:4px; vertical-align:3px}
+.loads table.mat td.pcv{color:var(--ink-2)}
+.loads .formula{font-family:var(--font-math); font-size:14.5px; line-height:1.45; color:var(--ink)}
+.loads .formula .num{font-family:var(--font-mono); font-size:11.5px; font-variant-numeric:tabular-nums}
+.rcode{display:block; font-family:var(--font-mono); font-size:12px; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:7px 10px; overflow-x:auto; white-space:pre; color:var(--ink); line-height:1.55}
+.rcode .cm{color:var(--muted)}
+
+.group{display:grid; gap:9px}
+.group + .group{border-top:1px solid var(--line); padding-top:16px}
+select{font:500 13px/1.2 var(--font-ui); color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:7px; padding:7px 8px; width:100%}
+.check{display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--ink-2); cursor:pointer; line-height:1.35}
+.check input{margin:1px 0 0; accent-color:var(--u1)}
+.check code{font-family:var(--font-mono); font-size:11.5px}
+.scrub{display:grid; grid-template-columns:76px minmax(0,1fr) 54px; align-items:center; gap:8px}
+.scrub label{font-size:12px; color:var(--ink-2); line-height:1.2}
+.scrub label .m{font-size:15px; color:var(--ink)}
+.scrub input[type=range]{width:100%; min-width:0; accent-color:var(--u1)}
+.scrub output{font-family:var(--font-mono); font-size:12.5px; text-align:right; font-variant-numeric:tabular-nums}
+.btns{display:flex; flex-wrap:wrap; gap:6px}
+.btn{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  font:500 12.5px/1 var(--font-ui); padding:8px 11px; border-radius:7px; cursor:pointer}
+.btn:hover{background:var(--chip)}
+.btn.play{min-width:92px; justify-content:center; background:var(--ink); color:var(--surface); border-color:var(--ink)}
+.btn.play:hover{background:var(--ink-2); border-color:var(--ink-2)}
+.btn.ghost{border-color:transparent; color:var(--ink-2)}
+
+.budget{display:grid; gap:6px}
+.brow{display:grid; grid-template-columns:62px minmax(0,1fr); align-items:center; gap:8px; font-size:11.5px; color:var(--ink-2)}
+.bar{display:flex; gap:2px; height:14px}
+.bar span{display:block; height:100%; background:var(--c); min-width:2px}
+.bar span:first-child{border-radius:3px 0 0 3px}
+.bar span:last-child{border-radius:0 3px 3px 0}
+.bar.ref span{background:color-mix(in srgb, var(--c) 35%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--c) 70%, transparent)}
+table.vt{width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric:tabular-nums}
+table.vt th{font-family:var(--font-mono); font-weight:500; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:right; padding:3px 4px; border-bottom:1px solid var(--line)}
+table.vt th:first-child, table.vt td:first-child{text-align:left}
+table.vt td{padding:5px 4px; text-align:right; font-family:var(--font-mono); font-size:12px; border-bottom:1px solid var(--grid)}
+table.vt td:first-child{font-family:var(--font-math); font-size:15px}
+table.vt td.lam{color:var(--ink-2)}
+table.vt tr.tot td{border-bottom:0; color:var(--ink-2); font-weight:500}
+table.vt tr.tot td:first-child{font-family:var(--font-ui); font-size:12px}
+.vt .sw{width:9px; height:9px; border-radius:2px; background:var(--c); margin-right:6px; vertical-align:0}
+.note{margin:0; font-size:12px; color:var(--ink-2)}
+.note b{font-weight:600; color:var(--ink)}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="titles">
+      <h1>PCA Basis Explorer <span class="course">PSTAT 100 · Week 6</span></h1>
+      <p class="sub">Turn an orthonormal basis inside the city sustainability data and watch the variance along each axis. Rotating never changes the total variance; it only moves variance from one axis to another. The principal component directions put as much as possible on the first axis, and in that basis the new coordinates are uncorrelated.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Number of variables">
+      <button type="button" data-mode="2d" aria-pressed="true">2D · two variables</button>
+      <button type="button" data-mode="3d" aria-pressed="false">3D · three variables</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <section class="stage" aria-label="Plots">
+      <div class="legend" id="legend"></div>
+      <div class="panels">
+        <figure class="panel">
+          <figcaption><span class="ptitle">Original coordinates</span><span class="hint" id="hintMain">Drag to aim u₁</span></figcaption>
+          <div class="plotwrap"><canvas id="cvMain" tabindex="0" aria-label="Scatterplot of the data with the rotating basis vectors"></canvas><div class="tip" id="tipMain" hidden></div></div>
+        </figure>
+        <figure class="panel">
+          <figcaption><span class="ptitle" id="scoreTitle">New coordinates</span><span class="hint" id="hintScore"></span></figcaption>
+          <div class="plotwrap"><canvas id="cvScore" aria-label="Scatterplot of the data in the rotated coordinates"></canvas><div class="tip" id="tipScore" hidden></div></div>
+        </figure>
+      </div>
+
+      <div class="readout">
+        <div class="block"><div class="eyebrow" id="matRTitle">Correlation matrix R of the data</div><div id="matR"></div></div>
+        <div class="block"><div class="eyebrow" id="matCTitle">Covariance of the new coordinates, UᵀRU</div><div id="matC"></div><div class="status" id="status"></div></div>
+        <div class="block"><div class="eyebrow">Basis vectors (loadings)</div><div class="loads" id="loads"></div></div>
+        <div class="block wide"><div class="eyebrow">The same numbers in R</div><code class="rcode" id="rcode"></code></div>
+      </div>
+    </section>
+
+    <aside class="rail" aria-label="Controls">
+      <div class="group">
+        <label class="eyebrow" for="dataset">Data</label>
+        <select id="dataset"></select>
+        <label class="check"><input type="checkbox" id="std" checked> <span>Standardize each variable first (<code>scale()</code>, so PCA uses the correlation matrix)</span></label>
+      </div>
+
+      <div class="group">
+        <div class="eyebrow">Rotate the basis</div>
+        <div id="sliders2">
+          <div class="scrub"><label for="theta">angle <span class="m">θ</span></label><input type="range" id="theta" min="0" max="360" step="0.5" value="0"><output id="thetaOut" for="theta">0.0°</output></div>
+        </div>
+        <div id="sliders3" hidden>
+          <div class="scrub"><label for="phi"><span class="m">u</span>₁ azimuth</label><input type="range" id="phi" min="-180" max="180" step="0.5" value="0"><output id="phiOut" for="phi">0.0°</output></div>
+          <div class="scrub"><label for="psi"><span class="m">u</span>₁ elevation</label><input type="range" id="psi" min="-90" max="90" step="0.5" value="0"><output id="psiOut" for="psi">0.0°</output></div>
+          <div class="scrub"><label for="omega">spin about <span class="m">u</span>₁</label><input type="range" id="omega" min="-180" max="180" step="0.5" value="0"><output id="omegaOut" for="omega">0.0°</output></div>
+        </div>
+        <div class="btns">
+          <button type="button" class="btn play" id="play" aria-pressed="false">▶ Rotate</button>
+          <button type="button" class="btn" id="snap">Snap to PCs</button>
+          <button type="button" class="btn ghost" id="reset">Original axes</button>
+        </div>
+        <label class="check"><input type="checkbox" id="showPC" checked> <span>Show the PC directions (dashed)</span></label>
+        <label class="check"><input type="checkbox" id="showProj" checked> <span id="projLabel">Show projections onto u₁</span></label>
+      </div>
+
+      <div class="group">
+        <div class="eyebrow">Variance along each axis</div>
+        <div class="budget" id="budget"></div>
+        <table class="vt" id="vt"></table>
+        <p class="note" id="totalNote"></p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script id="city-data" type="application/json">{"name":["Aberdeen, SD Micro Area","Aberdeen, WA Micro Area","Abilene, TX Metro Area","Ada, OK Micro Area","Adrian, MI Micro Area","Akron, OH Metro Area","Alamogordo, NM Micro Area","Albany, GA Metro Area","Albany, OR Metro Area","Albany-Schenectady-Troy, NY Metro Area","Albemarle, NC Micro Area","Albert Lea, MN Micro Area","Albertville, AL Micro Area","Albuquerque, NM Metro Area","Alexander City, AL Micro Area","Alexandria, LA Metro Area","Alexandria, MN Micro Area","Alice, TX Micro Area","Allentown-Bethlehem-Easton, PA-NJ Metro Area","Alma, MI Micro Area","Alpena, MI Micro Area","Altoona, PA Metro Area","Altus, OK Micro Area","Amarillo, TX Metro Area","Americus, GA Micro Area","Ames, IA Metro Area","Amsterdam, NY Micro Area","Anchorage, AK Metro Area","Andrews, TX Micro Area","Angola, IN Micro Area","Ann Arbor, MI Metro Area","Anniston-Oxford-Jacksonville, AL Metro Area","Appleton, WI Metro Area","Arcadia, FL Micro Area","Ardmore, OK Micro Area","Arkadelphia, AR Micro Area","Arkansas City-Winfield, KS Micro Area","Asheville, NC Metro Area","Ashland, OH Micro Area","Ashtabula, OH Micro Area","Astoria, OR Micro Area","Atchison, KS Micro Area","Athens, OH Micro Area","Athens, TN Micro Area","Athens, TX Micro Area","Athens-Clarke County, GA Metro Area","Atlanta-Sandy Springs-Roswell, GA Metro Area","Atlantic City-Hammonton, NJ Metro Area","Atmore, AL Micro Area","Auburn, IN Micro Area","Auburn, NY Micro Area","Auburn-Opelika, AL Metro Area","Augusta-Richmond County, GA-SC Metro Area","Augusta-Waterville, ME Micro Area","Austin, MN Micro Area","Austin-Round Rock, TX Metro Area","Bainbridge, GA Micro Area","Bakersfield, CA Metro Area","Baltimore-Columbia-Towson, MD Metro Area","Bangor, ME Metro Area","Baraboo, WI Micro Area","Bardstown, KY Micro Area","Barnstable Town, MA Metro Area","Barre, VT Micro Area","Bartlesville, OK Micro Area","Bastrop, LA Micro Area","Batavia, NY Micro Area","Batesville, AR Micro Area","Baton Rouge, LA Metro Area","Battle Creek, MI Metro Area","Bay City, MI Metro Area","Bay City, TX Micro Area","Beatrice, NE Micro Area","Beaumont-Port Arthur, TX Metro Area","Beaver Dam, WI Micro Area","Beckley, WV Metro Area","Bedford, IN Micro Area","Beeville, TX Micro Area","Bellefontaine, OH Micro Area","Bellingham, WA Metro Area","Bemidji, MN Micro Area","Bend-Redmond, OR Metro Area","Bennettsville, SC Micro Area","Bennington, VT Micro Area","Berlin, NH-VT Micro Area","Big Rapids, MI Micro Area","Big Spring, TX Micro Area","Big Stone Gap, VA Micro Area","Billings, MT Metro Area","Binghamton, NY Metro Area","Birmingham-Hoover, AL Metro Area","Bismarck, ND Metro Area","Blackfoot, ID Micro Area","Blacksburg-Christiansburg-Radford, VA Metro Area","Bloomington, IL Metro Area","Bloomington, IN Metro Area","Bloomsburg-Berwick, PA Metro Area","Bluefield, WV-VA Micro Area","Blytheville, AR Micro Area","Bogalusa, LA Micro Area","Boise City, ID Metro Area","Bonham, TX Micro Area","Boone, IA Micro Area","Boone, NC Micro Area","Borger, TX Micro Area","Boston-Cambridge-Newton, MA-NH Metro Area","Boulder, CO Metro Area","Bowling Green, KY Metro Area","Bozeman, MT Micro Area","Bradford, PA Micro Area","Brainerd, MN Micro Area","Branson, MO Micro Area","Breckenridge, CO Micro Area","Bremerton-Silverdale, WA Metro Area","Brenham, TX Micro Area","Brevard, NC Micro Area","Bridgeport-Stamford-Norwalk, CT Metro Area","Brookhaven, MS Micro Area","Brookings, OR Micro Area","Brookings, SD Micro Area","Brownsville, TN Micro Area","Brownsville-Harlingen, TX Metro Area","Brownwood, TX Micro Area","Brunswick, GA Metro Area","Bucyrus, OH Micro Area","Buffalo-Cheektowaga-Niagara Falls, NY Metro Area","Burley, ID Micro Area","Burlington, IA-IL Micro Area","Burlington, NC Metro Area","Burlington-South Burlington, VT Metro Area","Butte-Silver Bow, MT Micro Area","Cadillac, MI Micro Area","Calhoun, GA Micro Area","California-Lexington Park, MD Metro Area","Cambridge, MD Micro Area","Cambridge, OH Micro Area","Camden, AR Micro Area","Campbellsville, KY Micro Area","Cañon City, CO Micro Area","Canton, IL Micro Area","Canton-Massillon, OH Metro Area","Cape Coral-Fort Myers, FL Metro Area","Cape Girardeau, MO-IL Metro Area","Carbondale-Marion, IL Metro Area","Carlsbad-Artesia, NM Micro Area","Carroll, IA Micro Area","Carson City, NV Metro Area","Casper, WY Metro Area","Cedar City, UT Micro Area","Cedar Rapids, IA Metro Area","Cedartown, GA Micro Area","Celina, OH Micro Area","Central City, KY Micro Area","Centralia, IL Micro Area","Centralia, WA Micro Area","Chambersburg-Waynesboro, PA Metro Area","Champaign-Urbana, IL Metro Area","Charleston, WV Metro Area","Charleston-Mattoon, IL Micro Area","Charleston-North Charleston, SC Metro Area","Charlotte-Concord-Gastonia, NC-SC Metro Area","Charlottesville, VA Metro Area","Chattanooga, TN-GA Metro Area","Cheyenne, WY Metro Area","Chicago-Naperville-Elgin, IL-IN-WI Metro Area","Chico, CA Metro Area","Chillicothe, OH Micro Area","Cincinnati, OH-KY-IN Metro Area","Claremont-Lebanon, NH-VT Micro Area","Clarksburg, WV Micro Area","Clarksdale, MS Micro Area","Clarksville, TN-KY Metro Area","Clearlake, CA Micro Area","Cleveland, MS Micro Area","Cleveland, TN Metro Area","Cleveland-Elyria, OH Metro Area","Clewiston, FL Micro Area","Clinton, IA Micro Area","Clovis, NM Micro Area","Coeur d'Alene, ID Metro Area","Coffeyville, KS Micro Area","Coldwater, MI Micro Area","College Station-Bryan, TX Metro Area","Colorado Springs, CO Metro Area","Columbia, MO Metro Area","Columbia, SC Metro Area","Columbus, GA-AL Metro Area","Columbus, IN Metro Area","Columbus, MS Micro Area","Columbus, NE Micro Area","Columbus, OH Metro Area","Concord, NH Micro Area","Connersville, IN Micro Area","Cookeville, TN Micro Area","Coos Bay, OR Micro Area","Cordele, GA Micro Area","Corinth, MS Micro Area","Cornelia, GA Micro Area","Corning, NY Micro Area","Corpus Christi, TX Metro Area","Corsicana, TX Micro Area","Cortland, NY Micro Area","Corvallis, OR Metro Area","Coshocton, OH Micro Area","Craig, CO Micro Area","Crawfordsville, IN Micro Area","Crescent City, CA Micro Area","Crestview-Fort Walton Beach-Destin, FL Metro Area","Crossville, TN Micro Area","Cullman, AL Micro Area","Cullowhee, NC Micro Area","Cumberland, MD-WV Metro Area","Dallas-Fort Worth-Arlington, TX Metro Area","Dalton, GA Metro Area","Danville, IL Metro Area","Danville, KY Micro Area","Danville, VA Micro Area","Daphne-Fairhope-Foley, AL Metro Area","Davenport-Moline-Rock Island, IA-IL Metro Area","Dayton, OH Metro Area","Dayton, TN Micro Area","Decatur, AL Metro Area","Decatur, IL Metro Area","Decatur, IN Micro Area","Defiance, OH Micro Area","Del Rio, TX Micro Area","Deltona-Daytona Beach-Ormond Beach, FL Metro Area","Deming, NM Micro Area","Denver-Aurora-Lakewood, CO Metro Area","DeRidder, LA Micro Area","Des Moines-West Des Moines, IA Metro Area","Detroit-Warren-Dearborn, MI Metro Area","Dickinson, ND Micro Area","Dixon, IL Micro Area","Dodge City, KS Micro Area","Dothan, AL Metro Area","Douglas, GA Micro Area","Dover, DE Metro Area","Dublin, GA Micro Area","DuBois, PA Micro Area","Dubuque, IA Metro Area","Duluth, MN-WI Metro Area","Dumas, TX Micro Area","Duncan, OK Micro Area","Dunn, NC Micro Area","Durango, CO Micro Area","Durant, OK Micro Area","Durham-Chapel Hill, NC Metro Area","Dyersburg, TN Micro Area","Eagle Pass, TX Micro Area","Easton, MD Micro Area","East Stroudsburg, PA Metro Area","Eau Claire, WI Metro Area","Edwards, CO Micro Area","Effingham, IL Micro Area","El Campo, TX Micro Area","El Centro, CA Metro Area","El Dorado, AR Micro Area","Elizabeth City, NC Micro Area","Elizabethtown-Fort Knox, KY Metro Area","Elk City, OK Micro Area","Elkhart-Goshen, IN Metro Area","Elkins, WV Micro Area","Elko, NV Micro Area","Ellensburg, WA Micro Area","Elmira, NY Metro Area","El Paso, TX Metro Area","Emporia, KS Micro Area","Enid, OK Metro Area","Enterprise, AL Micro Area","Erie, PA Metro Area","Escanaba, MI Micro Area","Española, NM Micro Area","Eufaula, AL-GA Micro Area","Eugene, OR Metro Area","Eureka-Arcata-Fortuna, CA Micro Area","Evanston, WY Micro Area","Evansville, IN-KY Metro Area","Fairbanks, AK Metro Area","Fairfield, IA Micro Area","Fairmont, MN Micro Area","Fairmont, WV Micro Area","Fallon, NV Micro Area","Fargo, ND-MN Metro Area","Faribault-Northfield, MN Micro Area","Farmington, MO Micro Area","Farmington, NM Metro Area","Fayetteville, NC Metro Area","Fayetteville-Springdale-Rogers, AR-MO Metro Area","Fergus Falls, MN Micro Area","Fernley, NV Micro Area","Findlay, OH Micro Area","Fitzgerald, GA Micro Area","Flagstaff, AZ Metro Area","Flint, MI Metro Area","Florence, SC Metro Area","Florence-Muscle Shoals, AL Metro Area","Fond du Lac, WI Metro Area","Forest City, NC Micro Area","Forrest City, AR Micro Area","Fort Collins, CO Metro Area","Fort Dodge, IA Micro Area","Fort Leonard Wood, MO Micro Area","Fort Madison-Keokuk, IA-IL-MO Micro Area","Fort Morgan, CO Micro Area","Fort Payne, AL Micro Area","Fort Polk South, LA Micro Area","Fort Smith, AR-OK Metro Area","Fort Wayne, IN Metro Area","Frankfort, IN Micro Area","Frankfort, KY Micro Area","Fredericksburg, TX Micro Area","Freeport, IL Micro Area","Fremont, NE Micro Area","Fremont, OH Micro Area","Fresno, CA Metro Area","Gadsden, AL Metro Area","Gaffney, SC Micro Area","Gainesville, FL Metro Area","Gainesville, GA Metro Area","Gainesville, TX Micro Area","Galesburg, IL Micro Area","Gallup, NM Micro Area","Garden City, KS Micro Area","Gardnerville Ranchos, NV Micro Area","Georgetown, SC Micro Area","Gettysburg, PA Metro Area","Gillette, WY Micro Area","Glasgow, KY Micro Area","Glens Falls, NY Metro Area","Glenwood Springs, CO Micro Area","Gloversville, NY Micro Area","Goldsboro, NC Metro Area","Grand Forks, ND-MN Metro Area","Grand Island, NE Metro Area","Grand Junction, CO Metro Area","Grand Rapids, MN Micro Area","Grand Rapids-Wyoming, MI Metro Area","Grants, NM Micro Area","Grants Pass, OR Metro Area","Great Bend, KS Micro Area","Great Falls, MT Metro Area","Greeley, CO Metro Area","Green Bay, WI Metro Area","Greeneville, TN Micro Area","Greenfield Town, MA Micro Area","Greensboro-High Point, NC Metro Area","Greensburg, IN Micro Area","Greenville, MS Micro Area","Greenville, NC Metro Area","Greenville, OH Micro Area","Greenville-Anderson-Mauldin, SC Metro Area","Greenwood, MS Micro Area","Greenwood, SC Micro Area","Grenada, MS Micro Area","Gulfport-Biloxi-Pascagoula, MS Metro Area","Guymon, OK Micro Area","Hagerstown-Martinsburg, MD-WV Metro Area","Hailey, ID Micro Area","Hammond, LA Metro Area","Hanford-Corcoran, CA Metro Area","Hannibal, MO Micro Area","Harrisburg-Carlisle, PA Metro Area","Harrison, AR Micro Area","Harrisonburg, VA Metro Area","Hartford-West Hartford-East Hartford, CT Metro Area","Hastings, NE Micro Area","Hattiesburg, MS Metro Area","Hays, KS Micro Area","Heber, UT Micro Area","Helena, MT Micro Area","Helena-West Helena, AR Micro Area","Henderson, NC Micro Area","Hereford, TX Micro Area","Hermiston-Pendleton, OR Micro Area","Hickory-Lenoir-Morganton, NC Metro Area","Hillsdale, MI Micro Area","Hilo, HI Micro Area","Hilton Head Island-Bluffton-Beaufort, SC Metro Area","Hinesville, GA Metro Area","Hobbs, NM Micro Area","Holland, MI Micro Area","Homosassa Springs, FL Metro Area","Hood River, OR Micro Area","Hope, AR Micro Area","Hot Springs, AR Metro Area","Houghton, MI Micro Area","Houma-Thibodaux, LA Metro Area","Houston-The Woodlands-Sugar Land, TX Metro Area","Hudson, NY Micro Area","Huntingdon, PA Micro Area","Huntington, IN Micro Area","Huntington-Ashland, WV-KY-OH Metro Area","Huntsville, AL Metro Area","Huntsville, TX Micro Area","Huron, SD Micro Area","Hutchinson, KS Micro Area","Hutchinson, MN Micro Area","Idaho Falls, ID Metro Area","Indiana, PA Micro Area","Indianapolis-Carmel-Anderson, IN Metro Area","Indianola, MS Micro Area","Ionia, MI Micro Area","Iowa City, IA Metro Area","Iron Mountain, MI-WI Micro Area","Ithaca, NY Metro Area","Jackson, MI Metro Area","Jackson, MS Metro Area","Jackson, OH Micro Area","Jackson, TN Metro Area","Jackson, WY-ID Micro Area","Jacksonville, FL Metro Area","Jacksonville, IL Micro Area","Jacksonville, NC Metro Area","Jacksonville, TX Micro Area","Jamestown, ND Micro Area","Jamestown-Dunkirk-Fredonia, NY Micro Area","Janesville-Beloit, WI Metro Area","Jasper, IN Micro Area","Jefferson, GA Micro Area","Jefferson City, MO Metro Area","Jennings, LA Micro Area","Jesup, GA Micro Area","Johnson City, TN Metro Area","Johnstown, PA Metro Area","Jonesboro, AR Metro Area","Joplin, MO Metro Area","Junction City, KS Micro Area","Juneau, AK Micro Area","Kahului-Wailuku-Lahaina, HI Metro Area","Kalamazoo-Portage, MI Metro Area","Kalispell, MT Micro Area","Kankakee, IL Metro Area","Kansas City, MO-KS Metro Area","Kapaa, HI Micro Area","Kearney, NE Micro Area","Keene, NH Micro Area","Kendallville, IN Micro Area","Kennett, MO Micro Area","Kennewick-Richland, WA Metro Area","Kerrville, TX Micro Area","Ketchikan, AK Micro Area","Key West, FL Micro Area","Kill Devil Hills, NC Micro Area","Killeen-Temple, TX Metro Area","Kingsport-Bristol-Bristol, TN-VA Metro Area","Kingston, NY Metro Area","Kingsville, TX Micro Area","Kinston, NC Micro Area","Kirksville, MO Micro Area","Klamath Falls, OR Micro Area","Knoxville, TN Metro Area","Kokomo, IN Metro Area","Laconia, NH Micro Area","La Crosse-Onalaska, WI-MN Metro Area","Lafayette, LA Metro Area","Lafayette-West Lafayette, IN Metro Area","La Grande, OR Micro Area","LaGrange, GA Micro Area","Lake Charles, LA Metro Area","Lake City, FL Micro Area","Lake Havasu City-Kingman, AZ Metro Area","Lakeland-Winter Haven, FL Metro Area","Lamesa, TX Micro Area","Lancaster, PA Metro Area","Lansing-East Lansing, MI Metro Area","Laramie, WY Micro Area","Laredo, TX Metro Area","Las Cruces, NM Metro Area","Las Vegas, NM Micro Area","Las Vegas-Henderson-Paradise, NV Metro Area","Laurel, MS Micro Area","Laurinburg, NC Micro Area","Lawrence, KS Metro Area","Lawrenceburg, TN Micro Area","Lawton, OK Metro Area","Lebanon, MO Micro Area","Lebanon, PA Metro Area","Levelland, TX Micro Area","Lewisburg, PA Micro Area","Lewisburg, TN Micro Area","Lewiston, ID-WA Metro Area","Lewiston-Auburn, ME Metro Area","Lewistown, PA Micro Area","Lexington, NE Micro Area","Lexington-Fayette, KY Metro Area","Liberal, KS Micro Area","Lima, OH Metro Area","Lincoln, IL Micro Area","Lincoln, NE Metro Area","Little Rock-North Little Rock-Conway, AR Metro Area","Lock Haven, PA Micro Area","Logan, UT-ID Metro Area","Logan, WV Micro Area","Logansport, IN Micro Area","London, KY Micro Area","Longview, TX Metro Area","Longview, WA Metro Area","Los Alamos, NM Micro Area","Los Angeles-Long Beach-Anaheim, CA Metro Area","Louisville/Jefferson County, KY-IN Metro Area","Lubbock, TX Metro Area","Ludington, MI Micro Area","Lufkin, TX Micro Area","Lumberton, NC Micro Area","Lynchburg, VA Metro Area","Macomb, IL Micro Area","Macon-Bibb County, GA Metro Area","Madera, CA Metro Area","Madison, IN Micro Area","Madison, WI Metro Area","Madisonville, KY Micro Area","Magnolia, AR Micro Area","Malone, NY Micro Area","Malvern, AR Micro Area","Manchester-Nashua, NH Metro Area","Manhattan, KS Metro Area","Manitowoc, WI Micro Area","Mankato-North Mankato, MN Metro Area","Mansfield, OH Metro Area","Marietta, OH Micro Area","Marinette, WI-MI Micro Area","Marion, IN Micro Area","Marion, NC Micro Area","Marion, OH Micro Area","Marquette, MI Micro Area","Marshall, MN Micro Area","Marshall, MO Micro Area","Marshall, TX Micro Area","Marshalltown, IA Micro Area","Martin, TN Micro Area","Martinsville, VA Micro Area","Maryville, MO Micro Area","Mason City, IA Micro Area","Mayfield, KY Micro Area","Maysville, KY Micro Area","McAlester, OK Micro Area","McAllen-Edinburg-Mission, TX Metro Area","McComb, MS Micro Area","McMinnville, TN Micro Area","McPherson, KS Micro Area","Meadville, PA Micro Area","Medford, OR Metro Area","Memphis, TN-MS-AR Metro Area","Menomonie, WI Micro Area","Merced, CA Metro Area","Meridian, MS Micro Area","Merrill, WI Micro Area","Mexico, MO Micro Area","Miami, OK Micro Area","Miami-Fort Lauderdale-West Palm Beach, FL Metro Area","Michigan City-La Porte, IN Metro Area","Middlesborough, KY Micro Area","Midland, MI Metro Area","Midland, TX Metro Area","Milledgeville, GA Micro Area","Milwaukee-Waukesha-West Allis, WI Metro Area","Mineral Wells, TX Micro Area","Minneapolis-St. Paul-Bloomington, MN-WI Metro Area","Minot, ND Micro Area","Missoula, MT Metro Area","Mitchell, SD Micro Area","Moberly, MO Micro Area","Mobile, AL Metro Area","Modesto, CA Metro Area","Monroe, LA Metro Area","Monroe, MI Metro Area","Montgomery, AL Metro Area","Montrose, CO Micro Area","Morehead City, NC Micro Area","Morgan City, LA Micro Area","Morgantown, WV Metro Area","Morristown, TN Metro Area","Moscow, ID Micro Area","Moses Lake, WA Micro Area","Moultrie, GA Micro Area","Mountain Home, AR Micro Area","Mountain Home, ID Micro Area","Mount Airy, NC Micro Area","Mount Pleasant, MI Micro Area","Mount Pleasant, TX Micro Area","Mount Sterling, KY Micro Area","Mount Vernon, IL Micro Area","Mount Vernon, OH Micro Area","Mount Vernon-Anacortes, WA Metro Area","Muncie, IN Metro Area","Murray, KY Micro Area","Muscatine, IA Micro Area","Muskegon, MI Metro Area","Muskogee, OK Micro Area","Myrtle Beach-Conway-North Myrtle Beach, SC-NC Metro Area","Nacogdoches, TX Micro Area","Napa, CA Metro Area","Naples-Immokalee-Marco Island, FL Metro Area","Nashville-Davidson--Murfreesboro--Franklin, TN Metro Area","Natchez, MS-LA Micro Area","Natchitoches, LA Micro Area","New Bern, NC Metro Area","Newberry, SC Micro Area","New Castle, IN Micro Area","New Castle, PA Micro Area","New Haven-Milford, CT Metro Area","New Orleans-Metairie, LA Metro Area","New Philadelphia-Dover, OH Micro Area","Newport, OR Micro Area","Newport, TN Micro Area","Newton, IA Micro Area","New Ulm, MN Micro Area","New York-Newark-Jersey City, NY-NJ-PA Metro Area","Niles-Benton Harbor, MI Metro Area","Nogales, AZ Micro Area","Norfolk, NE Micro Area","North Platte, NE Micro Area","North Port-Sarasota-Bradenton, FL Metro Area","North Vernon, IN Micro Area","North Wilkesboro, NC Micro Area","Norwalk, OH Micro Area","Norwich-New London, CT Metro Area","Oak Harbor, WA Micro Area","Ocala, FL Metro Area","Ocean City, NJ Metro Area","Odessa, TX Metro Area","Ogden-Clearfield, UT Metro Area","Ogdensburg-Massena, NY Micro Area","Oil City, PA Micro Area","Okeechobee, FL Micro Area","Oklahoma City, OK Metro Area","Olean, NY Micro Area","Olympia-Tumwater, WA Metro Area","Omaha-Council Bluffs, NE-IA Metro Area","Oneonta, NY Micro Area","Ontario, OR-ID Micro Area","Opelousas, LA Micro Area","Orangeburg, SC Micro Area","Orlando-Kissimmee-Sanford, FL Metro Area","Oshkosh-Neenah, WI Metro Area","Oskaloosa, IA Micro Area","Othello, WA Micro Area","Ottawa, KS Micro Area","Ottawa-Peru, IL Micro Area","Ottumwa, IA Micro Area","Owatonna, MN Micro Area","Owensboro, KY Metro Area","Owosso, MI Micro Area","Oxford, MS Micro Area","Oxford, NC Micro Area","Oxnard-Thousand Oaks-Ventura, CA Metro Area","Ozark, AL Micro Area","Paducah, KY-IL Micro Area","Pahrump, NV Micro Area","Palatka, FL Micro Area","Palestine, TX Micro Area","Palm Bay-Melbourne-Titusville, FL Metro Area","Pampa, TX Micro Area","Panama City, FL Metro Area","Paragould, AR Micro Area","Paris, TN Micro Area","Paris, TX Micro Area","Parkersburg-Vienna, WV Metro Area","Parsons, KS Micro Area","Payson, AZ Micro Area","Pecos, TX Micro Area","Pella, IA Micro Area","Pensacola-Ferry Pass-Brent, FL Metro Area","Peoria, IL Metro Area","Peru, IN Micro Area","Philadelphia-Camden-Wilmington, PA-NJ-DE-MD Metro Area","Phoenix-Mesa-Scottsdale, AZ Metro Area","Picayune, MS Micro Area","Pierre, SD Micro Area","Pine Bluff, AR Metro Area","Pinehurst-Southern Pines, NC Micro Area","Pittsburg, KS Micro Area","Pittsburgh, PA Metro Area","Pittsfield, MA Metro Area","Plainview, TX Micro Area","Platteville, WI Micro Area","Plattsburgh, NY Micro Area","Plymouth, IN Micro Area","Pocatello, ID Metro Area","Point Pleasant, WV-OH Micro Area","Ponca City, OK Micro Area","Pontiac, IL Micro Area","Poplar Bluff, MO Micro Area","Portales, NM Micro Area","Port Angeles, WA Micro Area","Port Clinton, OH Micro Area","Portland-South Portland, ME Metro Area","Portland-Vancouver-Hillsboro, OR-WA Metro Area","Port Lavaca, TX Micro Area","Port St. Lucie, FL Metro Area","Portsmouth, OH Micro Area","Pottsville, PA Micro Area","Prescott, AZ Metro Area","Price, UT Micro Area","Prineville, OR Micro Area","Providence-Warwick, RI-MA Metro Area","Provo-Orem, UT Metro Area","Pueblo, CO Metro Area","Pullman, WA Micro Area","Punta Gorda, FL Metro Area","Quincy, IL-MO Micro Area","Racine, WI Metro Area","Raleigh, NC Metro Area","Rapid City, SD Metro Area","Raymondville, TX Micro Area","Reading, PA Metro Area","Red Bluff, CA Micro Area","Redding, CA Metro Area","Red Wing, MN Micro Area","Reno, NV Metro Area","Rexburg, ID Micro Area","Richmond, IN Micro Area","Richmond, VA Metro Area","Richmond-Berea, KY Micro Area","Rio Grande City, TX Micro Area","Riverside-San Bernardino-Ontario, CA Metro Area","Riverton, WY Micro Area","Roanoke, VA Metro Area","Roanoke Rapids, NC Micro Area","Rochelle, IL Micro Area","Rochester, MN Metro Area","Rochester, NY Metro Area","Rockford, IL Metro Area","Rockingham, NC Micro Area","Rock Springs, WY Micro Area","Rocky Mount, NC Metro Area","Rolla, MO Micro Area","Rome, GA Metro Area","Roseburg, OR Micro Area","Roswell, NM Micro Area","Ruidoso, NM Micro Area","Russellville, AR Micro Area","Ruston, LA Micro Area","Rutland, VT Micro Area","Sacramento--Roseville--Arden-Arcade, CA Metro Area","Safford, AZ Micro Area","Saginaw, MI Metro Area","St. Cloud, MN Metro Area","St. George, UT Metro Area","St. Joseph, MO-KS Metro Area","St. Louis, MO-IL Metro Area","St. Marys, GA Micro Area","St. Marys, PA Micro Area","Salem, OH Micro Area","Salem, OR Metro Area","Salina, KS Micro Area","Salinas, CA Metro Area","Salisbury, MD-DE Metro Area","Salt Lake City, UT Metro Area","San Angelo, TX Metro Area","San Antonio-New Braunfels, TX Metro Area","San Diego-Carlsbad, CA Metro Area","Sandpoint, ID Micro Area","Sandusky, OH Micro Area","Sanford, NC Micro Area","San Francisco-Oakland-Hayward, CA Metro Area","San Jose-Sunnyvale-Santa Clara, CA Metro Area","San Luis Obispo-Paso Robles-Arroyo Grande, CA Metro Area","Santa Cruz-Watsonville, CA Metro Area","Santa Fe, NM Metro Area","Santa Maria-Santa Barbara, CA Metro Area","Santa Rosa, CA Metro Area","Sault Ste. Marie, MI Micro Area","Savannah, GA Metro Area","Sayre, PA Micro Area","Scottsbluff, NE Micro Area","Scottsboro, AL Micro Area","Scranton--Wilkes-Barre--Hazleton, PA Metro Area","Searcy, AR Micro Area","Seattle-Tacoma-Bellevue, WA Metro Area","Sebastian-Vero Beach, FL Metro Area","Sebring, FL Metro Area","Sedalia, MO Micro Area","Selinsgrove, PA Micro Area","Selma, AL Micro Area","Seneca, SC Micro Area","Seneca Falls, NY Micro Area","Sevierville, TN Micro Area","Seymour, IN Micro Area","Shawano, WI Micro Area","Shawnee, OK Micro Area","Sheboygan, WI Metro Area","Shelby, NC Micro Area","Shelbyville, TN Micro Area","Shelton, WA Micro Area","Sheridan, WY Micro Area","Sherman-Denison, TX Metro Area","Show Low, AZ Micro Area","Shreveport-Bossier City, LA Metro Area","Sidney, OH Micro Area","Sierra Vista-Douglas, AZ Metro Area","Sikeston, MO Micro Area","Silver City, NM Micro Area","Sioux City, IA-NE-SD Metro Area","Sioux Falls, SD Metro Area","Snyder, TX Micro Area","Somerset, KY Micro Area","Somerset, PA Micro Area","Sonora, CA Micro Area","South Bend-Mishawaka, IN-MI Metro Area","Spartanburg, SC Metro Area","Spearfish, SD Micro Area","Spencer, IA Micro Area","Spirit Lake, IA Micro Area","Spokane-Spokane Valley, WA Metro Area","Springfield, IL Metro Area","Springfield, MA Metro Area","Springfield, MO Metro Area","Springfield, OH Metro Area","Starkville, MS Micro Area","State College, PA Metro Area","Statesboro, GA Micro Area","Staunton-Waynesboro, VA Metro Area","Steamboat Springs, CO Micro Area","Stephenville, TX Micro Area","Sterling, CO Micro Area","Sterling, IL Micro Area","Stevens Point, WI Micro Area","Stillwater, OK Micro Area","Stockton-Lodi, CA Metro Area","Storm Lake, IA Micro Area","Sturgis, MI Micro Area","Sulphur Springs, TX Micro Area","Summerville, GA Micro Area","Summit Park, UT Micro Area","Sumter, SC Metro Area","Sunbury, PA Micro Area","Susanville, CA Micro Area","Sweetwater, TX Micro Area","Syracuse, NY Metro Area","Tahlequah, OK Micro Area","Talladega-Sylacauga, AL Micro Area","Tallahassee, FL Metro Area","Tampa-St. Petersburg-Clearwater, FL Metro Area","Taos, NM Micro Area","Taylorville, IL Micro Area","Terre Haute, IN Metro Area","Texarkana, TX-AR Metro Area","The Dalles, OR Micro Area","The Villages, FL Metro Area","Thomaston, GA Micro Area","Thomasville, GA Micro Area","Tiffin, OH Micro Area","Tifton, GA Micro Area","Toccoa, GA Micro Area","Toledo, OH Metro Area","Topeka, KS Metro Area","Torrington, CT Micro Area","Traverse City, MI Micro Area","Trenton, NJ Metro Area","Troy, AL Micro Area","Truckee-Grass Valley, CA Micro Area","Tucson, AZ Metro Area","Tullahoma-Manchester, TN Micro Area","Tulsa, OK Metro Area","Tupelo, MS Micro Area","Tuscaloosa, AL Metro Area","Twin Falls, ID Micro Area","Tyler, TX Metro Area","Ukiah, CA Micro Area","Union City, TN-KY Micro Area","Urbana, OH Micro Area","Urban Honolulu, HI Metro Area","Utica-Rome, NY Metro Area","Uvalde, TX Micro Area","Valdosta, GA Metro Area","Vallejo-Fairfield, CA Metro Area","Valley, AL Micro Area","Van Wert, OH Micro Area","Vermillion, SD Micro Area","Vernal, UT Micro Area","Vernon, TX Micro Area","Vicksburg, MS Micro Area","Victoria, TX Metro Area","Vidalia, GA Micro Area","Vincennes, IN Micro Area","Vineland-Bridgeton, NJ Metro Area","Vineyard Haven, MA Micro Area","Virginia Beach-Norfolk-Newport News, VA-NC Metro Area","Visalia-Porterville, CA Metro Area","Wabash, IN Micro Area","Waco, TX Metro Area","Wahpeton, ND-MN Micro Area","Walla Walla, WA Metro Area","Wapakoneta, OH Micro Area","Warner Robins, GA Metro Area","Warren, PA Micro Area","Warrensburg, MO Micro Area","Warsaw, IN Micro Area","Washington, IN Micro Area","Washington, NC Micro Area","Washington-Arlington-Alexandria, DC-VA-MD-WV Metro Area","Washington Court House, OH Micro Area","Waterloo-Cedar Falls, IA Metro Area","Watertown, SD Micro Area","Watertown-Fort Atkinson, WI Micro Area","Watertown-Fort Drum, NY Metro Area","Wauchula, FL Micro Area","Wausau, WI Metro Area","Waycross, GA Micro Area","Weatherford, OK Micro Area","Weirton-Steubenville, WV-OH Metro Area","Wenatchee, WA Metro Area","West Plains, MO Micro Area","West Point, MS Micro Area","Wheeling, WV-OH Metro Area","Whitewater-Elkhorn, WI Micro Area","Wichita, KS Metro Area","Wichita Falls, TX Metro Area","Williamsport, PA Metro Area","Williston, ND Micro Area","Willmar, MN Micro Area","Wilmington, NC Metro Area","Wilmington, OH Micro Area","Wilson, NC Micro Area","Winchester, VA-WV Metro Area","Winnemucca, NV Micro Area","Winona, MN Micro Area","Winston-Salem, NC Metro Area","Wisconsin Rapids-Marshfield, WI Micro Area","Woodward, OK Micro Area","Wooster, OH Micro Area","Worcester, MA-CT Metro Area","Worthington, MN Micro Area","Yakima, WA Metro Area","Yankton, SD Micro Area","York-Hanover, PA Metro Area","Youngstown-Warren-Boardman, OH-PA Metro Area","Yuba City, CA Metro Area","Yuma, AZ Metro Area","Zanesville, OH Micro Area","Zapata, TX Micro Area"],"econ":[0.565264,0.427671,0.481092,0.466566,0.497908,0.491116,0.398821,0.324109,0.460757,0.565585,0.445682,0.531737,0.384731,0.448729,0.38862,0.420295,0.562738,0.380918,0.536131,0.391055,0.453621,0.482796,0.459686,0.508673,0.281757,0.493276,0.430263,0.629251,0.559668,0.554947,0.550618,0.399656,0.606484,0.32952,0.440955,0.434808,0.481108,0.506599,0.525675,0.428613,0.523037,0.396853,0.326452,0.395948,0.425212,0.382569,0.509766,0.424031,0.304849,0.525461,0.50946,0.43341,0.427798,0.508735,0.497815,0.579546,0.323262,0.381596,0.600357,0.465343,0.546338,0.501465,0.599743,0.554572,0.487832,0.321977,0.532881,0.42325,0.480872,0.44794,0.441902,0.419222,0.555818,0.440852,0.558829,0.421521,0.518558,0.414559,0.512629,0.512021,0.425452,0.542012,0.278261,0.49716,0.469704,0.37194,0.484969,0.34397,0.551025,0.457796,0.465362,0.620712,0.509102,0.462064,0.544794,0.430652,0.489064,0.40891,0.3268,0.273429,0.507974,0.480962,0.560801,0.362572,0.477786,0.626883,0.63763,0.445558,0.55701,0.434352,0.516977,0.443111,0.655355,0.594859,0.495423,0.464377,0.603888,0.374262,0.427708,0.528298,0.37636,0.284007,0.42356,0.402392,0.440627,0.499489,0.480328,0.491948,0.454474,0.590068,0.423159,0.441974,0.445097,0.678065,0.4513,0.425457,0.353159,0.378347,0.455754,0.465602,0.489038,0.465164,0.453479,0.404448,0.54033,0.555121,0.467995,0.566971,0.431003,0.575088,0.389876,0.561975,0.406624,0.437452,0.453043,0.556432,0.4577,0.450255,0.41265,0.512095,0.502219,0.568014,0.476586,0.583039,0.499835,0.411507,0.4399,0.509452,0.530477,0.480307,0.156104,0.480276,0.335797,0.188171,0.438316,0.461755,0.324108,0.514149,0.382568,0.51513,0.453236,0.497639,0.41555,0.560997,0.496851,0.480085,0.382168,0.54737,0.375702,0.567717,0.52686,0.602245,0.435389,0.353525,0.383896,0.189846,0.389527,0.443784,0.46215,0.473273,0.402609,0.510749,0.484628,0.461902,0.545039,0.56642,0.338525,0.528854,0.445022,0.433631,0.436203,0.445097,0.528449,0.41381,0.438136,0.421965,0.414319,0.509415,0.514078,0.474338,0.40622,0.439587,0.434115,0.448014,0.555125,0.408119,0.453647,0.221302,0.619889,0.45883,0.575998,0.472101,0.631905,0.517127,0.469599,0.412975,0.328714,0.517566,0.321811,0.435945,0.549216,0.505495,0.540318,0.452046,0.446413,0.604406,0.434022,0.509173,0.418348,0.286309,0.569318,0.487622,0.541825,0.693922,0.529631,0.421942,0.289346,0.401304,0.448304,0.503202,0.470052,0.521239,0.391067,0.623341,0.489267,0.493322,0.387431,0.443056,0.509859,0.482499,0.461826,0.458147,0.307129,0.299903,0.442608,0.392065,0.49363,0.491945,0.621002,0.434946,0.542482,0.500709,0.483026,0.576108,0.551048,0.457142,0.412242,0.41455,0.511201,0.544534,0.48252,0.540612,0.316438,0.44457,0.383695,0.369931,0.448774,0.567164,0.38518,0.30195,0.58795,0.44416,0.507266,0.490604,0.535658,0.405477,0.473089,0.404507,0.504976,0.527968,0.530617,0.506315,0.449779,0.526389,0.51497,0.364159,0.418703,0.35684,0.402816,0.492346,0.527137,0.449291,0.170161,0.485535,0.562291,0.390498,0.584413,0.633795,0.393646,0.524539,0.586954,0.461736,0.396155,0.521657,0.529962,0.472119,0.499955,0.531972,0.283351,0.384574,0.480957,0.491081,0.56494,0.547172,0.409968,0.524851,0.449768,0.552775,0.178211,0.367927,0.523744,0.479259,0.219845,0.349693,0.313202,0.435869,0.498116,0.522449,0.520178,0.407132,0.41601,0.466063,0.568247,0.451504,0.501332,0.564512,0.511438,0.382388,0.492956,0.666084,0.590742,0.18118,0.299178,0.509278,0.449191,0.436283,0.453631,0.475065,0.487473,0.423261,0.495719,0.563661,0.403489,0.549454,0.403499,0.400562,0.412819,0.463155,0.497827,0.531831,0.47753,0.55113,0.429889,0.515239,0.410252,0.480828,0.497535,0.579154,0.519279,0.434451,0.510597,0.165599,0.509195,0.541828,0.477917,0.478673,0.462059,0.431058,0.393152,0.421106,0.674289,0.495511,0.468437,0.464657,0.411962,0.59097,0.427912,0.50348,0.569534,0.503658,0.52947,0.372882,0.380877,0.41388,0.451738,0.449742,0.477438,0.504311,0.698329,0.613557,0.474689,0.503541,0.483479,0.548395,0.605893,0.531449,0.544136,0.531985,0.333066,0.535318,0.485017,0.594152,0.570238,0.531044,0.484751,0.430647,0.500641,0.383653,0.336474,0.384772,0.421324,0.469977,0.478478,0.566824,0.528551,0.450714,0.485011,0.444762,0.38295,0.476281,0.398564,0.394999,0.443307,0.378675,0.565152,0.486808,0.450083,0.30752,0.324823,0.280783,0.484175,0.358909,0.271054,0.502799,0.420268,0.454226,0.439589,0.551932,0.459038,0.52976,0.473231,0.525346,0.497524,0.50511,0.51938,0.486333,0.421246,0.463951,0.561606,0.543399,0.49042,0.474038,0.505764,0.32854,0.476956,0.302792,0.470249,0.457383,0.774798,0.532258,0.505221,0.457792,0.423878,0.433214,0.285712,0.503269,0.406089,0.338591,0.407552,0.508638,0.592191,0.460346,0.330589,0.42486,0.435894,0.621984,0.500845,0.552686,0.526853,0.450369,0.477199,0.487143,0.456228,0.417449,0.446398,0.474606,0.51004,0.460336,0.437905,0.545441,0.405552,0.374009,0.434148,0.525479,0.409851,0.405505,0.447816,0.273729,0.26679,0.389357,0.59744,0.477546,0.449619,0.42113,0.525189,0.338002,0.365919,0.568722,0.436807,0.395652,0.438068,0.460762,0.209132,0.509698,0.609023,0.305942,0.503343,0.421692,0.60832,0.631431,0.474506,0.540831,0.448159,0.421708,0.432151,0.368424,0.54138,0.446584,0.446285,0.474968,0.422461,0.451257,0.434319,0.422218,0.471673,0.348298,0.457309,0.482022,0.426673,0.368656,0.422958,0.383984,0.400585,0.505744,0.518488,0.410504,0.399122,0.547766,0.433278,0.396231,0.456836,0.348873,0.662013,0.526942,0.533366,0.22311,0.231602,0.451225,0.404021,0.461336,0.455771,0.520855,0.435838,0.506713,0.43972,0.313191,0.567161,0.578865,0.53397,0.437873,0.327864,0.52331,0.548199,0.513652,0.495048,0.384879,0.493131,0.566713,0.566459,0.415565,0.511414,0.506005,0.599891,0.419263,0.473285,0.3866,0.501516,0.45701,0.570973,0.561199,0.473589,0.400471,0.327119,0.318516,0.477749,0.53908,0.468212,0.422206,0.523005,0.49647,0.467151,0.561566,0.476133,0.502891,0.412456,0.48959,0.643947,0.399451,0.422512,0.421436,0.302883,0.441885,0.485425,0.487027,0.482392,0.49029,0.3881,0.431184,0.459986,0.481589,0.368713,0.476373,0.578682,0.502559,0.519203,0.463182,0.515395,0.506964,0.41137,0.601569,0.359986,0.500887,0.426418,0.518371,0.503906,0.445302,0.503598,0.490518,0.508709,0.457662,0.420586,0.436253,0.494468,0.369157,0.313245,0.456082,0.549407,0.571253,0.568813,0.491406,0.451889,0.348849,0.479058,0.46348,0.471741,0.449842,0.505076,0.560688,0.402827,0.367867,0.454733,0.498661,0.530022,0.588119,0.523944,0.171889,0.50171,0.365084,0.443264,0.565372,0.515641,0.343723,0.42461,0.546621,0.428953,0.143811,0.460268,0.502465,0.504114,0.309407,0.520422,0.595862,0.501097,0.44672,0.308467,0.599605,0.383826,0.418254,0.425145,0.424977,0.412109,0.415058,0.408185,0.325058,0.517368,0.518201,0.411006,0.420189,0.530298,0.507766,0.485184,0.517241,0.499128,0.543474,0.456551,0.487726,0.514669,0.537008,0.506031,0.582319,0.502792,0.491969,0.580989,0.451197,0.503215,0.44304,0.713535,0.78405,0.593664,0.611946,0.509636,0.573059,0.626554,0.412154,0.474664,0.513484,0.47553,0.408382,0.46604,0.45477,0.628493,0.434365,0.360135,0.455373,0.54565,0.231459,0.427416,0.514285,0.459904,0.504412,0.497238,0.450136,0.564449,0.370423,0.441259,0.462006,0.582817,0.487146,0.262893,0.396497,0.551326,0.447046,0.432067,0.378529,0.526439,0.588513,0.503909,0.323068,0.477223,0.471383,0.46074,0.457618,0.508431,0.53423,0.588024,0.483136,0.5061,0.47201,0.47825,0.456787,0.305647,0.513731,0.345102,0.53503,0.598288,0.426683,0.462162,0.514205,0.52769,0.377609,0.454517,0.505085,0.489011,0.459598,0.343187,0.716769,0.381176,0.477423,0.47603,0.411387,0.495627,0.388772,0.374119,0.432889,0.47349,0.338806,0.517674,0.45538,0.409044,0.477736,0.527313,0.329509,0.377573,0.491595,0.346362,0.353991,0.436349,0.534033,0.593683,0.519043,0.539964,0.314271,0.528782,0.432504,0.453355,0.486724,0.431736,0.433109,0.49126,0.467771,0.390485,0.372021,0.527467,0.693334,0.468157,0.418199,0.329979,0.583328,0.401299,0.516302,0.38638,0.528646,0.460119,0.332545,0.496639,0.309514,0.483964,0.417847,0.612592,0.542461,0.331735,0.518734,0.429631,0.579345,0.477173,0.588235,0.47459,0.483468,0.512231,0.550696,0.494936,0.378589,0.710939,0.446141,0.513913,0.548358,0.566142,0.500517,0.353214,0.538239,0.390293,0.504795,0.468251,0.521973,0.385716,0.296034,0.471265,0.514238,0.508286,0.449957,0.496611,0.671464,0.54602,0.449559,0.468391,0.398526,0.588993,0.599825,0.498449,0.440455,0.534022,0.529118,0.525822,0.55136,0.465332,0.422006,0.49282,0.557758,0.446485,0.439245,0.384488,0.453476,0.203537],"social":[0.591259,0.520744,0.496874,0.526206,0.60244,0.578999,0.535298,0.468263,0.588662,0.568286,0.587395,0.634747,0.598454,0.57023,0.585492,0.508394,0.642964,0.503092,0.591204,0.564051,0.590404,0.586206,0.482921,0.558571,0.482583,0.589348,0.5452,0.506543,0.606114,0.554772,0.599668,0.568235,0.643038,0.571701,0.531645,0.550896,0.526939,0.592277,0.611096,0.562205,0.523041,0.539151,0.49565,0.57823,0.563095,0.520374,0.559745,0.52939,0.559894,0.56639,0.550341,0.555813,0.551304,0.573205,0.613116,0.543977,0.463923,0.552166,0.591699,0.553171,0.593079,0.617391,0.619629,0.602033,0.565641,0.537154,0.613677,0.556369,0.54841,0.560261,0.619017,0.489553,0.601456,0.531678,0.612788,0.543608,0.597665,0.46263,0.57347,0.597013,0.555611,0.602085,0.521332,0.568066,0.500806,0.548865,0.532051,0.525019,0.609481,0.573094,0.602285,0.608096,0.594035,0.545115,0.604384,0.514693,0.577981,0.549745,0.433735,0.501923,0.603827,0.575837,0.648375,0.506116,0.534973,0.602084,0.628437,0.54857,0.597033,0.520413,0.571888,0.520303,0.489076,0.592699,0.579374,0.593591,0.620203,0.565401,0.583339,0.544762,0.483531,0.516731,0.572976,0.485339,0.558434,0.575524,0.590268,0.58161,0.56011,0.612822,0.562288,0.580458,0.514788,0.605497,0.530791,0.552397,0.495784,0.524915,0.614424,0.594147,0.590137,0.546825,0.551575,0.544522,0.565518,0.648661,0.498789,0.533034,0.5587,0.649989,0.529926,0.657618,0.556482,0.585579,0.576373,0.599754,0.556797,0.538268,0.564741,0.60039,0.594409,0.578034,0.558699,0.567019,0.595652,0.553613,0.550945,0.579126,0.557927,0.582554,0.445519,0.512252,0.502952,0.451271,0.554311,0.565721,0.502899,0.613433,0.503199,0.579027,0.527514,0.574267,0.484105,0.616292,0.532104,0.602149,0.465396,0.585125,0.508357,0.612985,0.563264,0.579685,0.554407,0.559942,0.560946,0.45076,0.576535,0.594168,0.570376,0.498301,0.506878,0.541547,0.614509,0.620591,0.585679,0.575634,0.518065,0.534538,0.570488,0.644515,0.473667,0.544197,0.552704,0.554297,0.558199,0.577381,0.529543,0.628461,0.610801,0.560364,0.525045,0.60963,0.568041,0.618212,0.615806,0.519099,0.57158,0.546156,0.625912,0.567522,0.627469,0.590677,0.572631,0.600464,0.521588,0.56943,0.499471,0.563181,0.528306,0.587385,0.634726,0.58421,0.509122,0.545979,0.557217,0.617011,0.493897,0.568182,0.499873,0.524577,0.594892,0.561014,0.607584,0.554482,0.647451,0.540194,0.517907,0.597327,0.562035,0.549951,0.513753,0.588263,0.570454,0.550766,0.529195,0.564844,0.508806,0.511945,0.551014,0.564315,0.56025,0.604218,0.499794,0.490899,0.570664,0.526326,0.564745,0.571452,0.474951,0.636882,0.600036,0.586279,0.588577,0.564163,0.631334,0.525781,0.563374,0.474928,0.593737,0.624139,0.57997,0.607366,0.465045,0.491918,0.571835,0.5889,0.603856,0.625672,0.555627,0.518963,0.629206,0.576816,0.432244,0.608632,0.59228,0.603544,0.491627,0.535665,0.597302,0.576859,0.575082,0.637231,0.563913,0.557943,0.566043,0.527118,0.593027,0.591469,0.526546,0.572092,0.561106,0.559468,0.533142,0.531387,0.602979,0.626958,0.636002,0.568658,0.563262,0.554563,0.591914,0.536066,0.524202,0.541371,0.571731,0.610798,0.619344,0.622112,0.477972,0.622599,0.550371,0.574455,0.649816,0.602424,0.543313,0.626184,0.554329,0.560105,0.419668,0.501664,0.623715,0.605634,0.505878,0.559293,0.482069,0.484787,0.537271,0.57531,0.520208,0.527707,0.518059,0.564866,0.591559,0.634016,0.545884,0.605043,0.595506,0.494505,0.538671,0.572114,0.610271,0.463225,0.488505,0.529562,0.555569,0.580649,0.599258,0.545169,0.592633,0.429819,0.546328,0.661058,0.626615,0.632029,0.544924,0.580302,0.587545,0.563245,0.548997,0.5638,0.570527,0.623405,0.564174,0.622965,0.488527,0.602969,0.564968,0.661369,0.624387,0.59764,0.569882,0.460302,0.630164,0.607437,0.574625,0.533761,0.580151,0.550777,0.550481,0.528919,0.531414,0.568467,0.584174,0.464075,0.571383,0.55163,0.547171,0.57909,0.646626,0.623309,0.571288,0.560605,0.538348,0.530597,0.590813,0.506785,0.575423,0.435168,0.531962,0.507236,0.573324,0.61726,0.555096,0.562011,0.542042,0.591908,0.548314,0.568474,0.490871,0.597593,0.547253,0.4701,0.495762,0.491032,0.485284,0.562084,0.577927,0.469008,0.490424,0.534674,0.564635,0.566208,0.547083,0.551651,0.621787,0.55826,0.554322,0.574592,0.476033,0.559129,0.566617,0.518081,0.54617,0.519146,0.620536,0.578178,0.534671,0.528409,0.578202,0.400902,0.484976,0.573446,0.474057,0.519403,0.572409,0.449177,0.566046,0.602365,0.548518,0.570181,0.544295,0.568962,0.559786,0.570486,0.541214,0.549818,0.517846,0.553943,0.612612,0.56883,0.584189,0.555793,0.604895,0.533533,0.571605,0.582465,0.527108,0.570725,0.650411,0.543858,0.57478,0.479575,0.570069,0.503734,0.505785,0.580392,0.54907,0.503099,0.58778,0.552641,0.600444,0.558719,0.629031,0.517082,0.542533,0.552827,0.515713,0.638723,0.608022,0.572454,0.586923,0.531308,0.513691,0.539434,0.563406,0.56692,0.615846,0.52479,0.589745,0.610502,0.534679,0.531797,0.526456,0.60603,0.596983,0.550689,0.510587,0.530005,0.535038,0.53556,0.606715,0.556422,0.590421,0.51648,0.621648,0.529442,0.504538,0.593873,0.564769,0.523072,0.530653,0.570641,0.499312,0.646491,0.546032,0.454204,0.585175,0.488607,0.640607,0.561968,0.569801,0.559785,0.560481,0.58646,0.565571,0.532301,0.640406,0.581401,0.64168,0.522117,0.521834,0.537699,0.554476,0.545728,0.570883,0.48368,0.608242,0.513466,0.585178,0.505238,0.534631,0.543284,0.585084,0.617929,0.604588,0.51358,0.542745,0.600265,0.588902,0.508826,0.55413,0.474263,0.590368,0.569268,0.566561,0.498301,0.465012,0.558082,0.594995,0.561807,0.592405,0.568813,0.534909,0.610333,0.506033,0.501021,0.640764,0.659945,0.557432,0.56561,0.594694,0.596538,0.570724,0.595496,0.561468,0.589947,0.591368,0.572396,0.607121,0.592588,0.531434,0.50763,0.622363,0.53197,0.566779,0.554389,0.546585,0.545765,0.59666,0.590559,0.580093,0.563684,0.551005,0.574656,0.540404,0.590288,0.605874,0.566106,0.587787,0.612947,0.605385,0.672294,0.596495,0.629193,0.492815,0.572607,0.601591,0.529225,0.581147,0.550024,0.542056,0.55595,0.594611,0.536384,0.488789,0.584481,0.54976,0.496422,0.581251,0.524682,0.515345,0.565338,0.641781,0.566106,0.616777,0.555391,0.59275,0.544252,0.55098,0.616394,0.500547,0.628097,0.498234,0.598627,0.57152,0.510291,0.600826,0.542942,0.616101,0.579225,0.602535,0.523025,0.588527,0.482714,0.516611,0.588807,0.550408,0.60344,0.598358,0.46851,0.600653,0.548776,0.573703,0.606427,0.548446,0.618638,0.563531,0.622811,0.561074,0.482211,0.591563,0.604907,0.586883,0.596808,0.587697,0.52125,0.600801,0.560968,0.567718,0.663872,0.574558,0.555063,0.55555,0.577689,0.548416,0.513732,0.561618,0.554966,0.574569,0.469352,0.62592,0.656823,0.573629,0.57565,0.514928,0.556568,0.517246,0.514662,0.52364,0.586925,0.53799,0.559376,0.566682,0.47388,0.591774,0.577966,0.557405,0.587277,0.617772,0.594186,0.541199,0.578846,0.525728,0.577918,0.599726,0.5842,0.575795,0.544504,0.551062,0.584958,0.553823,0.540338,0.558927,0.563667,0.562099,0.571228,0.583725,0.596272,0.584122,0.59762,0.578185,0.566576,0.585109,0.505061,0.501419,0.57722,0.567874,0.605526,0.55772,0.619966,0.585015,0.62313,0.598444,0.545719,0.607758,0.536557,0.581026,0.557997,0.494435,0.580976,0.5733,0.540398,0.631432,0.550237,0.561306,0.541402,0.592596,0.525843,0.495628,0.527386,0.602352,0.56659,0.550962,0.552035,0.594453,0.594898,0.533954,0.565036,0.611417,0.561776,0.571091,0.593429,0.54785,0.588548,0.568766,0.595121,0.589776,0.565428,0.564156,0.553095,0.465483,0.588624,0.466619,0.588095,0.584709,0.521032,0.584714,0.606347,0.623107,0.479511,0.554848,0.591107,0.582513,0.563279,0.539161,0.553481,0.557846,0.555816,0.513757,0.500084,0.567294,0.485319,0.599747,0.523847,0.556461,0.511585,0.608173,0.534759,0.554504,0.567407,0.715113,0.558694,0.499951,0.573728,0.485377,0.55189,0.545553,0.576517,0.661008,0.62037,0.580131,0.482494,0.615901,0.541924,0.576712,0.539976,0.539756,0.584233,0.573318,0.556326,0.553705,0.518364,0.591717,0.545476,0.554813,0.535164,0.48964,0.558611,0.550689,0.609352,0.50421,0.580982,0.443769,0.523447,0.54291,0.529665,0.524732,0.524617,0.555483,0.547951,0.562211,0.627086,0.494767,0.616764,0.604542,0.648861,0.531546,0.563542,0.551683,0.560653,0.590975,0.552071,0.600245,0.532322,0.620464,0.563417,0.624219,0.488196,0.595165,0.645207,0.518268,0.496744,0.56641,0.571877,0.569016,0.55611,0.579415,0.573548,0.559023,0.520592,0.578107,0.512634,0.632561,0.544431,0.558754,0.533628,0.562688,0.549784,0.620803,0.585669,0.631754,0.567682,0.62981,0.596645,0.600355,0.560703,0.572599,0.612782,0.583849,0.561314,0.565346,0.576408,0.482714],"env":[0.444472,0.429274,0.454192,0.425964,0.282499,0.326248,0.416241,0.469606,0.400522,0.412463,0.457464,0.439022,0.463289,0.48457,0.458844,0.421205,0.459275,0.453837,0.490845,0.240842,0.220822,0.447737,0.418203,0.521188,0.452533,0.472281,0.344778,0.435387,0.455735,0.403196,0.308648,0.445075,0.407864,0.456488,0.443097,0.482089,0.431171,0.474517,0.344794,0.232539,0.455913,0.341407,0.300852,0.407531,0.424643,0.470921,0.503433,0.451491,0.452031,0.406547,0.330362,0.452384,0.473494,0.444051,0.44111,0.468008,0.433876,0.540754,0.503469,0.402601,0.441625,0.438362,0.422865,0.445078,0.432898,0.4241,0.293361,0.4493,0.460866,0.204435,0.36207,0.41031,0.411173,0.454381,0.431461,0.38986,0.367435,0.438687,0.287176,0.471485,0.407534,0.423667,0.465707,0.406769,0.428288,0.209315,0.467036,0.466545,0.468896,0.389062,0.483234,0.393803,0.352784,0.426769,0.441088,0.418028,0.428605,0.424198,0.441814,0.446606,0.470959,0.415458,0.442113,0.468764,0.444856,0.460872,0.470034,0.427416,0.436588,0.476416,0.452299,0.46665,0.506573,0.378373,0.438371,0.461677,0.455833,0.444386,0.437945,0.455677,0.373821,0.441841,0.440359,0.451069,0.331715,0.345623,0.449991,0.444582,0.443818,0.404955,0.486438,0.315079,0.451771,0.418498,0.387327,0.361557,0.48264,0.424793,0.411945,0.406336,0.361132,0.482688,0.429106,0.419069,0.441756,0.456577,0.470486,0.475463,0.473495,0.444755,0.445117,0.320674,0.408489,0.41244,0.438289,0.439331,0.43664,0.412671,0.432792,0.454084,0.453679,0.469136,0.434344,0.446201,0.469734,0.448162,0.273122,0.411578,0.428002,0.373677,0.443219,0.417679,0.468128,0.475387,0.400193,0.318348,0.40916,0.312734,0.456069,0.384621,0.367606,0.220929,0.371904,0.448688,0.466324,0.453291,0.480665,0.425674,0.436252,0.427367,0.346073,0.423032,0.394931,0.398158,0.364741,0.438999,0.428963,0.493604,0.366821,0.428695,0.436013,0.411172,0.398014,0.273171,0.511592,0.414446,0.363893,0.461484,0.42293,0.438269,0.491127,0.398885,0.487562,0.441615,0.412035,0.397739,0.461484,0.432939,0.451576,0.329607,0.42316,0.435438,0.444535,0.352272,0.266754,0.436375,0.435681,0.427991,0.503384,0.428832,0.442512,0.364802,0.456606,0.439923,0.399486,0.432866,0.452739,0.387636,0.441445,0.422396,0.422947,0.431161,0.468111,0.389223,0.465624,0.426871,0.405914,0.475206,0.33334,0.406929,0.404791,0.465536,0.439665,0.471196,0.478369,0.440933,0.429667,0.471486,0.445602,0.408356,0.432526,0.326755,0.419391,0.513113,0.434462,0.408428,0.554817,0.41451,0.368215,0.443012,0.413223,0.330539,0.480018,0.482639,0.430826,0.331882,0.47309,0.431639,0.440264,0.460316,0.387621,0.354076,0.431212,0.413711,0.41885,0.435863,0.416848,0.423343,0.444158,0.440195,0.376341,0.257593,0.439129,0.447444,0.28986,0.441338,0.435459,0.426129,0.435503,0.439046,0.41504,0.346864,0.44186,0.430987,0.43562,0.453682,0.453482,0.426603,0.394619,0.292888,0.382055,0.469344,0.264275,0.406456,0.352942,0.498515,0.46038,0.44808,0.381109,0.471254,0.438073,0.433554,0.397387,0.442469,0.396756,0.40057,0.478845,0.463849,0.421271,0.374628,0.488462,0.372646,0.454781,0.410132,0.445264,0.419636,0.439975,0.27474,0.444692,0.388032,0.397083,0.394523,0.45048,0.433261,0.41009,0.395693,0.460834,0.41205,0.449999,0.460211,0.30901,0.454931,0.455912,0.421304,0.437872,0.432117,0.41645,0.444308,0.499159,0.429289,0.494403,0.444783,0.467127,0.452113,0.476806,0.441237,0.454222,0.426061,0.413611,0.487903,0.459447,0.431548,0.457972,0.45933,0.468898,0.45095,0.366337,0.532468,0.44993,0.4279,0.48307,0.277395,0.458037,0.43843,0.464243,0.462581,0.296887,0.42105,0.462917,0.426752,0.447061,0.394662,0.401476,0.455632,0.440943,0.44197,0.437568,0.399457,0.486075,0.449076,0.423374,0.459686,0.25644,0.425424,0.357417,0.37759,0.241066,0.454164,0.322376,0.376022,0.510255,0.444722,0.451498,0.440746,0.422788,0.40537,0.37951,0.432476,0.308816,0.483313,0.465368,0.431933,0.461125,0.409425,0.43087,0.447609,0.390101,0.417513,0.435372,0.403382,0.290795,0.458783,0.445278,0.454401,0.375339,0.425818,0.399548,0.413214,0.447204,0.422708,0.459275,0.475155,0.391851,0.487787,0.42552,0.426952,0.404489,0.781308,0.462975,0.436031,0.434961,0.427237,0.297063,0.431156,0.46544,0.450132,0.384222,0.418102,0.46518,0.447977,0.403489,0.423622,0.444878,0.451914,0.462705,0.257829,0.517644,0.454235,0.487938,0.413519,0.49118,0.436775,0.474606,0.44078,0.397442,0.398808,0.428606,0.482187,0.440252,0.453844,0.417018,0.430148,0.435016,0.431401,0.462108,0.402306,0.388682,0.297562,0.439848,0.435792,0.460745,0.465519,0.427101,0.410817,0.389674,0.426805,0.444362,0.411916,0.318067,0.584845,0.429542,0.434937,0.270687,0.414867,0.430645,0.415655,0.416378,0.46513,0.482373,0.414563,0.447971,0.419429,0.469704,0.411384,0.455291,0.410865,0.420597,0.366176,0.397344,0.333819,0.348611,0.387786,0.397292,0.450002,0.318831,0.328549,0.404031,0.428159,0.415279,0.343657,0.41176,0.446036,0.455554,0.399657,0.423057,0.405993,0.411412,0.404488,0.460975,0.430721,0.432367,0.458442,0.423177,0.43372,0.441196,0.467317,0.436986,0.398215,0.42964,0.386592,0.454023,0.422687,0.395228,0.268833,0.446196,0.456687,0.405125,0.492665,0.473617,0.425004,0.493096,0.415258,0.420828,0.424,0.490107,0.420158,0.293801,0.464814,0.419601,0.377484,0.438374,0.392983,0.449748,0.392616,0.429123,0.460459,0.440652,0.428043,0.451979,0.272663,0.346001,0.427399,0.428049,0.332255,0.428871,0.307749,0.416879,0.408858,0.299542,0.379412,0.446117,0.438672,0.448348,0.451929,0.443421,0.459708,0.428132,0.452108,0.418365,0.3754,0.439908,0.414065,0.440387,0.37522,0.415933,0.398354,0.451794,0.409673,0.48728,0.28225,0.39664,0.420352,0.504532,0.464375,0.445452,0.448044,0.381491,0.431083,0.443909,0.403785,0.385605,0.425092,0.498472,0.367485,0.457297,0.438372,0.434293,0.399241,0.433418,0.455401,0.411534,0.437806,0.434256,0.44291,0.467422,0.391155,0.451171,0.395321,0.418008,0.374637,0.400431,0.430088,0.419444,0.309334,0.424489,0.451657,0.460603,0.4519,0.424711,0.329172,0.406262,0.420769,0.436186,0.449171,0.4736,0.439847,0.418736,0.430033,0.404901,0.382392,0.495328,0.504605,0.445292,0.429172,0.457166,0.378946,0.520005,0.501096,0.440032,0.447984,0.444787,0.461675,0.399768,0.503727,0.430952,0.443277,0.429111,0.361663,0.398927,0.421349,0.299473,0.430072,0.459679,0.457111,0.441244,0.384819,0.324358,0.430887,0.465481,0.458001,0.454674,0.227175,0.434959,0.463597,0.49217,0.372471,0.470022,0.488707,0.372963,0.437246,0.468743,0.378818,0.370745,0.476255,0.485734,0.405512,0.482676,0.479428,0.481451,0.415691,0.449728,0.456247,0.36255,0.445771,0.392186,0.402876,0.565155,0.501586,0.453971,0.449288,0.442776,0.42639,0.357469,0.412736,0.448204,0.479851,0.413798,0.434089,0.447193,0.416409,0.409011,0.455375,0.443268,0.424129,0.430586,0.45262,0.496851,0.247404,0.442208,0.474326,0.431502,0.473055,0.438651,0.448795,0.257248,0.450664,0.375535,0.438421,0.383894,0.52081,0.524649,0.468024,0.525792,0.375811,0.314579,0.373094,0.509664,0.486831,0.481416,0.414959,0.429633,0.434995,0.342808,0.360467,0.452065,0.414309,0.518439,0.454785,0.449171,0.445933,0.471362,0.48476,0.442627,0.442596,0.451723,0.407167,0.463474,0.329749,0.465199,0.385619,0.452607,0.392649,0.403387,0.450595,0.403797,0.418215,0.498836,0.443534,0.43148,0.432093,0.28484,0.463601,0.463149,0.384485,0.42926,0.45073,0.476128,0.422232,0.409704,0.484997,0.337973,0.433522,0.456091,0.429217,0.443511,0.482807,0.412077,0.489466,0.43484,0.305616,0.421398,0.459816,0.456606,0.443461,0.419665,0.396418,0.454845,0.40924,0.434827,0.426215,0.462302,0.454597,0.132467,0.393197,0.434675,0.450902,0.433217,0.428715,0.486823,0.49239,0.381383,0.390754,0.417125,0.432746,0.461628,0.417189,0.402807,0.401095,0.405431,0.438293,0.455906,0.425603,0.459419,0.353514,0.45754,0.485637,0.30522,0.426895,0.452037,0.321672,0.46654,0.434846,0.496231,0.428405,0.414773,0.433451,0.454951,0.488763,0.428763,0.456827,0.360125,0.429978,0.268594,0.418898,0.364816,0.459938,0.480172,0.454671,0.449945,0.394818,0.442284,0.47893,0.435609,0.451717,0.460785,0.480194,0.389826,0.393459,0.418903,0.401749,0.482966,0.338867,0.438556,0.387235,0.424867,0.278983,0.444194,0.384212,0.431847,0.429107,0.345372,0.376802,0.534612,0.310867,0.438828,0.461478,0.448365,0.372358,0.439785,0.410895,0.472643,0.383238,0.381179,0.453587,0.453608,0.384419,0.409966,0.443654,0.422035,0.44405,0.403904,0.451709,0.431694,0.423234,0.301284,0.43657,0.465161,0.511503,0.405327,0.464267,0.425609,0.398109,0.344548,0.459442,0.433905,0.449561,0.378425,0.464031,0.382851,0.473701,0.413223,0.3445,0.420995]}</script>
+<script>
+(() => {
+'use strict';
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const $ = id => document.getElementById(id);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SUB = ['₁', '₂', '₃'];
+
+const CITY = JSON.parse($('city-data').textContent);
+const VARS = {
+  econ:   {label: 'Econ',   r: 'Econ_Domain'},
+  social: {label: 'Social', r: 'Social_Domain'},
+  env:    {label: 'Env',    r: 'Env_Domain'},
+};
+const DATASETS = {
+  '2d': [
+    {id: 'econ_social', label: 'Economic vs. social index (lecture)', vars: ['econ', 'social']},
+    {id: 'econ_env',    label: 'Economic vs. environmental index',    vars: ['econ', 'env']},
+    {id: 'social_env',  label: 'Social vs. environmental index',      vars: ['social', 'env']},
+  ],
+  '3d': [
+    {id: 'city3',   label: 'Econ, social, environmental (lecture)', vars: ['econ', 'social', 'env']},
+    {id: 'pancake', label: 'Simulated flat cloud (n = 400)', sim: true},
+  ],
+};
+
+/* ---------- linear algebra ---------- */
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+const norm = a => Math.sqrt(dot(a, a));
+const unit = a => { const n = norm(a); return a.map(v => v / n); };
+const col = (M, c) => M.map(r => r[c]);
+const fromCols = cs => cs[0].map((_, r) => cs.map(c => c[r]));
+const eye = p => Array.from({length: p}, (_, i) => Array.from({length: p}, (_, j) => +(i === j)));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const matMul = (A, B) => A.map(r => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0)));
+
+// Jacobi eigenvalue iteration for a small symmetric matrix; values sorted largest first.
+function symEigen(S) {
+  const p = S.length, a = S.map(r => r.slice()), V = eye(p);
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0;
+    for (let i = 0; i < p; i++) for (let j = i + 1; j < p; j++) off += a[i][j] * a[i][j];
+    if (off < 1e-30) break;
+    for (let i = 0; i < p - 1; i++) for (let j = i + 1; j < p; j++) {
+      if (Math.abs(a[i][j]) < 1e-300) continue;
+      const th = (a[j][j] - a[i][i]) / (2 * a[i][j]);
+      const t = (th >= 0 ? 1 : -1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < p; k++) { const x = a[k][i], y = a[k][j]; a[k][i] = c*x - s*y; a[k][j] = s*x + c*y; }
+      for (let k = 0; k < p; k++) { const x = a[i][k], y = a[j][k]; a[i][k] = c*x - s*y; a[j][k] = s*x + c*y; }
+      for (let k = 0; k < p; k++) { const x = V[k][i], y = V[k][j]; V[k][i] = c*x - s*y; V[k][j] = s*x + c*y; }
+    }
+  }
+  const order = [...Array(p).keys()].sort((x, y) => a[y][y] - a[x][x]);
+  return {values: order.map(i => a[i][i]), V: fromCols(order.map(i => col(V, i)))};
+}
+
+// Orthonormal frame from u1's direction (azimuth phi, elevation psi) and a spin omega of u2, u3 about u1.
+function frameMat(ph, ps, om) {
+  const cf = Math.cos(ph), sf = Math.sin(ph), cs = Math.cos(ps), ss = Math.sin(ps), co = Math.cos(om), so = Math.sin(om);
+  const u1 = [cs*cf, cs*sf, ss], eph = [-sf, cf, 0], eps = [-ss*cf, -ss*sf, cs];
+  const u2 = eph.map((v, i) => co*v + so*eps[i]);
+  const u3 = eph.map((v, i) => -so*v + co*eps[i]);
+  return fromCols([u1, u2, u3]);
+}
+function anglesOf(M, prev) {
+  const u1 = col(M, 0), u2 = col(M, 1);
+  const ps = Math.asin(clamp(u1[2], -1, 1));
+  const ph = Math.hypot(u1[0], u1[1]) < 1e-9 ? prev[0] : Math.atan2(u1[1], u1[0]);
+  const cf = Math.cos(ph), sf = Math.sin(ph), cs = Math.cos(ps), ss = Math.sin(ps);
+  const om = Math.atan2(dot(u2, [-ss*cf, -ss*sf, cs]), dot(u2, [-sf, cf, 0]));
+  return [ph, ps, om];
+}
+function rotAxis(k, ang) {
+  const c = Math.cos(ang), s = Math.sin(ang), C = 1 - c, [x, y, z] = k;
+  return [[c + x*x*C, x*y*C - z*s, x*z*C + y*s], [y*x*C + z*s, c + y*y*C, y*z*C - x*s], [z*x*C - y*s, z*y*C + x*s, c + z*z*C]];
+}
+function reortho(M) {
+  const u1 = unit(col(M, 0)); let u2 = col(M, 1); const d = dot(u1, u2);
+  u2 = unit(u2.map((v, i) => v - d * u1[i]));
+  return fromCols([u1, u2, cross(u1, u2)]);
+}
+function quatOf(m) {
+  const t = m[0][0] + m[1][1] + m[2][2]; let s;
+  if (t > 0) { s = Math.sqrt(t + 1) * 2; return [s/4, (m[2][1]-m[1][2])/s, (m[0][2]-m[2][0])/s, (m[1][0]-m[0][1])/s]; }
+  if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) { s = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2; return [(m[2][1]-m[1][2])/s, s/4, (m[0][1]+m[1][0])/s, (m[0][2]+m[2][0])/s]; }
+  if (m[1][1] > m[2][2]) { s = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2; return [(m[0][2]-m[2][0])/s, (m[0][1]+m[1][0])/s, s/4, (m[1][2]+m[2][1])/s]; }
+  s = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2; return [(m[1][0]-m[0][1])/s, (m[0][2]+m[2][0])/s, (m[1][2]+m[2][1])/s, s/4];
+}
+function matOf([w, x, y, z]) {
+  return [[1 - 2*(y*y + z*z), 2*(x*y - z*w), 2*(x*z + y*w)],
+          [2*(x*y + z*w), 1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+          [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x*x + y*y)]];
+}
+function slerp(a, b, t) {
+  let d = dot(a, b);
+  if (d < 0) { b = b.map(v => -v); d = -d; }
+  if (d > 0.9995) return unit(a.map((v, i) => v + t * (b[i] - v)));
+  const th = Math.acos(d), s = Math.sin(th), wa = Math.sin((1 - t) * th) / s, wb = Math.sin(t * th) / s;
+  return a.map((v, i) => wa * v + wb * b[i]);
+}
+
+/* ---------- data ---------- */
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function simPancake() {
+  const rnd = mulberry32(5309);
+  const gauss = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
+  const n = 400, sd = [2.0, 1.1, 0.25], Q = frameMat(40 * D2R, 28 * D2R, 35 * D2R), shift = [5, 3, 8];
+  const cols = [[], [], []];
+  for (let i = 0; i < n; i++) {
+    const g = sd.map(s => s * gauss());
+    for (let r = 0; r < 3; r++) cols[r].push(dot(Q[r], g) + shift[r]);
+  }
+  return {cols, labels: ['x₁', 'x₂', 'x₃'], rnames: ['x1', 'x2', 'x3'], names: null, sim: true};
+}
+function buildRaw(ds) {
+  if (ds.sim) return simPancake();
+  return {cols: ds.vars.map(v => CITY[v]), labels: ds.vars.map(v => VARS[v].label), rnames: ds.vars.map(v => VARS[v].r), names: CITY.name, sim: false};
+}
+// Center (and optionally scale with the n - 1 SD, as R's scale() does), then eigendecompose S = Z'Z/(n - 1).
+function prepare(raw, std) {
+  const p = raw.cols.length, n = raw.cols[0].length, mean = [], sd = [];
+  for (const c of raw.cols) {
+    const m = c.reduce((s, v) => s + v, 0) / n;
+    mean.push(m); sd.push(Math.sqrt(c.reduce((s, v) => s + (v - m) ** 2, 0) / (n - 1)));
+  }
+  const Z = new Float64Array(n * p);
+  for (let i = 0; i < n; i++) for (let j = 0; j < p; j++) Z[i*p + j] = (raw.cols[j][i] - mean[j]) / (std ? sd[j] : 1);
+  const S = Array.from({length: p}, () => Array(p).fill(0));
+  for (let i = 0; i < n; i++) for (let a = 0; a < p; a++) for (let b = a; b < p; b++) S[a][b] += Z[i*p + a] * Z[i*p + b];
+  for (let a = 0; a < p; a++) for (let b = a; b < p; b++) { S[a][b] /= n - 1; S[b][a] = S[a][b]; }
+  let {values, V} = symEigen(S);
+  if (p === 2) {
+    let v = col(V, 0); if (v[1] < 0 || (v[1] === 0 && v[0] < 0)) v = v.map(x => -x);
+    V = fromCols([v, [-v[1], v[0]]]);
+  } else {
+    const cs = [0, 1].map(c => { const v = col(V, c); const big = v.reduce((m, x) => Math.abs(x) > Math.abs(m) ? x : m, 0); return big < 0 ? v.map(x => -x) : v; });
+    V = fromCols([cs[0], cs[1], cross(cs[0], cs[1])]);
+  }
+  let lim = 0;
+  for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < p; j++) s += Z[i*p + j] ** 2; lim = Math.max(lim, Math.sqrt(s)); }
+  const total = S.reduce((s, r, i) => s + r[i], 0);
+  const decs = clamp(2 - Math.floor(Math.log10(total)), 3, 7);
+  return {...raw, n, p, Z, S, mean, sd, lam: values, V, lim: lim * 1.04, total, std, decs};
+}
+
+/* ---------- state ---------- */
+const st = {
+  mode: '2d', ds: {'2d': 'econ_social', '3d': 'city3'}, std: true,
+  theta: 0, U3: eye(3), ang: [0, 0, 0],
+  showPC: true, proj: {'2d': true, '3d': false},
+  playing: false, anim: null, tumble: 0,
+  yaw: -0.75, pitch: 0.34, hover: -1,
+};
+const cache = {};
+function data(mode = st.mode) {
+  const key = mode + ':' + st.ds[mode] + ':' + st.std;
+  if (!cache[key]) cache[key] = prepare(buildRaw(DATASETS[mode].find(d => d.id === st.ds[mode])), st.std);
+  return cache[key];
+}
+function basis() {
+  if (st.mode === '3d') return st.U3;
+  const t = st.theta * D2R, c = Math.cos(t), s = Math.sin(t);
+  return [[c, -s], [s, c]];
+}
+// Rotated scores Y = Z U and their covariance U'SU.
+function computeStats(P, U) {
+  const p = P.p, n = P.n, Y = new Float64Array(n * p);
+  for (let i = 0; i < n; i++) for (let j = 0; j < p; j++) { let s = 0; for (let r = 0; r < p; r++) s += P.Z[i*p + r] * U[r][j]; Y[i*p + j] = s; }
+  const C = Array.from({length: p}, (_, a) => Array.from({length: p}, (_, b) => {
+    let s = 0; for (let r = 0; r < p; r++) for (let q = 0; q < p; q++) s += U[r][a] * P.S[r][q] * U[q][b]; return s;
+  }));
+  return {Y, C, v: C.map((r, i) => r[i])};
+}
+
+/* ---------- formatting ---------- */
+function fmt(v, d) { if (Math.abs(v) < 0.5 * 10 ** -d) v = 0; return (v < 0 ? '−' : '') + Math.abs(v).toFixed(d); }
+const pct = (v, t) => (100 * v / t).toFixed(1) + '%';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw)), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+function tickFmt(v, step) { const d = Math.max(0, -Math.floor(Math.log10(step) + 1e-9)); return Math.abs(v) < step * 1e-6 ? '0' : v.toFixed(d).replace('-', '−'); }
+const deg = v => v.toFixed(1) + '°';
+
+/* ---------- theme ---------- */
+let C = {};
+function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgba(h, a) { const [r, g, b] = hexRGB(h); return `rgba(${r},${g},${b},${a})`; }
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['surface', 'ink', 'ink-2', 'muted', 'line', 'grid', 'axis', 'pt', 'pin', 'u1', 'u2', 'u3']) C[k] = cs.getPropertyValue('--' + k).trim();
+  C.u = [C.u1, C.u2, C.u3];
+  C.dark = hexRGB(C.surface).reduce((s, v) => s + v, 0) < 300;
+}
+const FONT = {
+  tick: '10.5px "IBM Plex Mono", ui-monospace, monospace',
+  axis: '500 12px "IBM Plex Sans", system-ui, sans-serif',
+  small: '11px "IBM Plex Sans", system-ui, sans-serif',
+  label: '500 11px "IBM Plex Mono", ui-monospace, monospace',
+  vec: 'italic 600 16px "STIX Two Text", "Times New Roman", serif',
+};
+
+/* ---------- canvas helpers ---------- */
+function setup(cv) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  return {ctx, w: r.width, h: r.height, dpr};
+}
+function halo(ctx, t, x, y, color, font, align = 'center', base = 'middle') {
+  ctx.font = font; ctx.textAlign = align; ctx.textBaseline = base;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = C.surface; ctx.strokeText(t, x, y);
+  ctx.fillStyle = color; ctx.fillText(t, x, y);
+}
+function arrow(ctx, x0, y0, x1, y1, color, lw) {
+  const a = Math.atan2(y1 - y0, x1 - x0), L = Math.hypot(x1 - x0, y1 - y0), hs = Math.min(11, L * 0.5);
+  if (L < 0.5) return;
+  const draw = (c, w, grow) => {
+    ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - Math.cos(a) * hs * 0.7, y1 - Math.sin(a) * hs * 0.7); ctx.stroke();
+    const h = hs + grow;
+    ctx.beginPath(); ctx.moveTo(x1 + Math.cos(a) * grow * 0.8, y1 + Math.sin(a) * grow * 0.8);
+    ctx.lineTo(x1 - h * Math.cos(a - 0.45), y1 - h * Math.sin(a - 0.45));
+    ctx.lineTo(x1 - h * Math.cos(a + 0.45), y1 - h * Math.sin(a + 0.45)); ctx.closePath(); ctx.fill();
+  };
+  draw(C.surface, lw + 4, 2.2);
+  draw(color, lw, 0);
+}
+// A square data frame centred on the origin, shared by both scatter panels so their scales match.
+function plotFrame(w, h, lim) {
+  const padL = 44, padR = 12, padT = 10, padB = 38;
+  const s = Math.max(40, Math.min(w - padL - padR, h - padT - padB));
+  const cx = padL + (w - padL - padR) / 2, cy = padT + (h - padT - padB) / 2, k = s / 2 / lim;
+  return {cx, cy, k, s, x0: cx - s/2, x1: cx + s/2, y0: cy - s/2, y1: cy + s/2, X: x => cx + x * k, Y: y => cy - y * k};
+}
+function drawGrid(ctx, F, lim, xlab, ylab, xAxisColor, yAxisColor) {
+  const step = niceStep(lim / 3);
+  ctx.lineWidth = 1; ctx.strokeStyle = C.grid;
+  ctx.beginPath();
+  for (let v = Math.ceil(-lim / step) * step; v <= lim + 1e-12; v += step) {
+    if (Math.abs(v) < step * 1e-6) continue;
+    ctx.moveTo(F.X(v), F.y0); ctx.lineTo(F.X(v), F.y1); ctx.moveTo(F.x0, F.Y(v)); ctx.lineTo(F.x1, F.Y(v));
+  }
+  ctx.stroke();
+  ctx.lineWidth = xAxisColor ? 1.5 : 1;
+  ctx.strokeStyle = xAxisColor ? rgba(xAxisColor, .55) : C.axis;
+  ctx.beginPath(); ctx.moveTo(F.x0, F.Y(0)); ctx.lineTo(F.x1, F.Y(0)); ctx.stroke();
+  ctx.strokeStyle = yAxisColor ? rgba(yAxisColor, .55) : C.axis;
+  ctx.beginPath(); ctx.moveTo(F.X(0), F.y0); ctx.lineTo(F.X(0), F.y1); ctx.stroke();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.strokeRect(F.x0 + .5, F.y0 + .5, F.s - 1, F.s - 1);
+  ctx.font = FONT.tick; ctx.fillStyle = C.muted;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = Math.ceil(-lim / step) * step; v <= lim + 1e-12; v += step) ctx.fillText(tickFmt(v, step), F.X(v), F.y1 + 4);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = Math.ceil(-lim / step) * step; v <= lim + 1e-12; v += step) ctx.fillText(tickFmt(v, step), F.x0 - 5, F.Y(v));
+  ctx.font = FONT.axis; ctx.fillStyle = C['ink-2'];
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(xlab, F.cx, F.y1 + 19);
+  ctx.save(); ctx.translate(F.x0 - 32, F.cy); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'middle'; ctx.fillText(ylab, 0, 0); ctx.restore();
+}
+function clipTo(ctx, F) { ctx.save(); ctx.beginPath(); ctx.rect(F.x0, F.y0, F.s, F.s); ctx.clip(); }
+function edgePoint(F, v, lim, inset = 0.9) {
+  const t = lim * inset / Math.max(Math.abs(v[0]), Math.abs(v[1]), 1e-9);
+  return [F.X(v[0] * t), F.Y(v[1] * t)];
+}
+
+/* ---------- 2D: data in the original coordinates ---------- */
+const hit = {main: null, score: null};
+function drawMain2D(P, U, S) {
+  const {ctx, w, h} = setup($('cvMain')), F = plotFrame(w, h, P.lim), lim = P.lim, n = P.n;
+  const kind = P.std ? 'standardized' : 'centered';
+  drawGrid(ctx, F, lim, `${P.labels[0]} (${kind})`, `${P.labels[1]} (${kind})`);
+  const u = [col(U, 0), col(U, 1)];
+  clipTo(ctx, F);
+  for (let j = 1; j >= 0; j--) {
+    ctx.strokeStyle = rgba(C.u[j], .4); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(F.X(-2*lim*u[j][0]), F.Y(-2*lim*u[j][1])); ctx.lineTo(F.X(2*lim*u[j][0]), F.Y(2*lim*u[j][1])); ctx.stroke();
+  }
+  if (st.showPC) {
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = C.pin; ctx.lineWidth = 1.3;
+    for (let j = 0; j < 2; j++) {
+      const v = col(P.V, j);
+      ctx.beginPath(); ctx.moveTo(F.X(-2*lim*v[0]), F.Y(-2*lim*v[1])); ctx.lineTo(F.X(2*lim*v[0]), F.Y(2*lim*v[1])); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  if (st.proj['2d']) {
+    ctx.strokeStyle = rgba(C.u2, C.dark ? .22 : .18); ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const t = S.Y[i*2];
+      ctx.moveTo(F.X(P.Z[i*2]), F.Y(P.Z[i*2 + 1])); ctx.lineTo(F.X(t * u[0][0]), F.Y(t * u[0][1]));
+    }
+    ctx.stroke();
+  }
+  const pts = new Float32Array(n * 2);
+  ctx.fillStyle = rgba(C.pt, C.dark ? .5 : .45);
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = F.X(P.Z[i*2]), y = F.Y(P.Z[i*2 + 1]); pts[i*2] = x; pts[i*2 + 1] = y;
+    ctx.moveTo(x + 2.3, y); ctx.arc(x, y, 2.3, 0, 2 * Math.PI);
+  }
+  ctx.fill();
+  if (st.proj['2d']) {
+    ctx.fillStyle = rgba(C.u1, .7);
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) { const t = S.Y[i*2], x = F.X(t * u[0][0]), y = F.Y(t * u[0][1]); ctx.moveTo(x + 1.7, y); ctx.arc(x, y, 1.7, 0, 2 * Math.PI); }
+    ctx.fill();
+  }
+  hoverRing(ctx, pts, st.hover);
+  const tips = [];
+  for (let j = 1; j >= 0; j--) {
+    const L = 2 * Math.sqrt(Math.max(S.v[j], 0));
+    const x1 = F.X(L * u[j][0]), y1 = F.Y(L * u[j][1]);
+    arrow(ctx, F.X(0), F.Y(0), x1, y1, C.u[j], 2.6);
+    tips[j] = [x1, y1, u[j]];
+  }
+  ctx.restore();
+  if (st.showPC) for (let j = 0; j < 2; j++) {
+    const [x, y] = edgePoint(F, col(P.V, j), lim, 0.86);
+    halo(ctx, 'PC' + (j + 1), x, y, C['ink-2'], FONT.label);
+  }
+  for (let j = 0; j < 2; j++) {
+    const [x, y, uj] = tips[j];
+    halo(ctx, 'u' + SUB[j], x + uj[0] * 15, y - uj[1] * 15, C.ink, FONT.vec);
+  }
+  hit.main = pts;
+}
+function hoverRing(ctx, pts, i) {
+  if (i < 0 || !pts) return;
+  const x = pts[i*2], y = pts[i*2 + 1];
+  ctx.lineWidth = 2; ctx.strokeStyle = C.surface; ctx.beginPath(); ctx.arc(x, y, 6, 0, 2 * Math.PI); ctx.stroke();
+  ctx.lineWidth = 1.6; ctx.strokeStyle = C.ink; ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.stroke();
+}
+
+/* ---------- both modes: the data in the rotated basis ---------- */
+function drawScores(P, U, S) {
+  const {ctx, w, h} = setup($('cvScore')), F = plotFrame(w, h, P.lim), n = P.n, p = P.p;
+  drawGrid(ctx, F, P.lim, 'y₁ = Z u₁', 'y₂ = Z u₂', C.u1, C.u2);
+  clipTo(ctx, F);
+  const pts = new Float32Array(n * 2);
+  ctx.fillStyle = rgba(C.pt, C.dark ? .5 : .45);
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = F.X(S.Y[i*p]), y = F.Y(S.Y[i*p + 1]); pts[i*2] = x; pts[i*2 + 1] = y;
+    ctx.moveTo(x + 2.3, y); ctx.arc(x, y, 2.3, 0, 2 * Math.PI);
+  }
+  ctx.fill();
+  hoverRing(ctx, pts, st.hover);
+  const s1 = 2 * Math.sqrt(Math.max(S.v[0], 0)), s2 = 2 * Math.sqrt(Math.max(S.v[1], 0));
+  ctx.lineCap = 'round';
+  for (const [c, x0, y0, x1, y1] of [[C.u1, -s1, 0, s1, 0], [C.u2, 0, -s2, 0, s2]]) {
+    ctx.strokeStyle = C.surface; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(F.X(x0), F.Y(y0)); ctx.lineTo(F.X(x1), F.Y(y1)); ctx.stroke();
+    ctx.strokeStyle = c; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(F.X(x0), F.Y(y0)); ctx.lineTo(F.X(x1), F.Y(y1)); ctx.stroke();
+  }
+  ctx.restore();
+  halo(ctx, '±2 SD', Math.min(F.X(s1) + 6, F.x1 - 30), F.Y(0) - 11, C['ink-2'], FONT.small, 'left');
+  halo(ctx, '±2 SD', F.X(0) + 7, Math.max(F.Y(s2), F.y0 + 10), C['ink-2'], FONT.small, 'left');
+  hit.score = pts;
+  if (p === 3) $('hintScore').textContent = `keeps ${pct(S.v[0] + S.v[1], P.total)} of the total variance`;
+  else $('hintScore').textContent = 'bars show ±2 SD on each axis';
+}
+
+/* ---------- 3D: the cloud with the basis ---------- */
+function camera() {
+  return {cy: Math.cos(st.yaw), sy: Math.sin(st.yaw), cp: Math.cos(st.pitch), sp: Math.sin(st.pitch)};
+}
+// World x = first variable, y = second, z = third (up). Returns [screen-right, screen-up, depth away from viewer].
+function toCam(c, x, y, z) {
+  const x1 = c.cy * x - c.sy * y, y1 = c.sy * x + c.cy * y;
+  return [x1, c.cp * z + c.sp * y1, c.cp * y1 - c.sp * z];
+}
+function drawMain3D(P, U, S) {
+  const {ctx, w, h} = setup($('cvMain')), n = P.n, lim = P.lim, cam = camera();
+  const k = Math.min(w, h) / 2 / (lim * 1.08), cx = w / 2, cy = h / 2, D = lim * 5;
+  const pr = v => { const [a, b, d] = toCam(cam, v[0], v[1], v[2]); const f = D / (D + d); return [cx + a * f * k, cy - b * f * k, d, f]; };
+  const L = lim * 0.92;
+  ctx.font = FONT.label;
+  for (let j = 0; j < 3; j++) {
+    const e = [0, 0, 0]; e[j] = L;
+    const a = pr(e.map(v => -v)), b = pr(e);
+    ctx.strokeStyle = C.axis; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  const u = [0, 1, 2].map(j => col(U, j));
+  if (st.proj['3d']) {
+    const c4 = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => pr(u[0].map((v, i) => L * (a * v + b * u[1][i]))));
+    ctx.fillStyle = rgba(C.ink, C.dark ? .07 : .045); ctx.strokeStyle = C.axis; ctx.lineWidth = 1;
+    ctx.beginPath(); c4.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  const proj = new Array(n);
+  for (let i = 0; i < n; i++) proj[i] = pr([P.Z[i*3], P.Z[i*3 + 1], P.Z[i*3 + 2]]);
+  if (st.proj['3d']) {
+    ctx.strokeStyle = rgba(C.u3, C.dark ? .35 : .3); ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const t = S.Y[i*3 + 2], z = [P.Z[i*3], P.Z[i*3 + 1], P.Z[i*3 + 2]];
+      const f = pr(z.map((v, r) => v - t * u[2][r]));
+      ctx.moveTo(proj[i][0], proj[i][1]); ctx.lineTo(f[0], f[1]);
+    }
+    ctx.stroke();
+  }
+  const order = [...Array(n).keys()].sort((a, b) => proj[b][2] - proj[a][2]);
+  const pts = new Float32Array(n * 2);
+  for (const i of order) {
+    const [x, y, d, f] = proj[i]; pts[i*2] = x; pts[i*2 + 1] = y;
+    const near = clamp(0.5 - d / (2 * lim), 0, 1);
+    ctx.fillStyle = rgba(C.pt, (C.dark ? .28 : .22) + .4 * near);
+    ctx.beginPath(); ctx.arc(x, y, 2.4 * f, 0, 2 * Math.PI); ctx.fill();
+  }
+  hoverRing(ctx, pts, st.hover);
+  for (let j = 0; j < 3; j++) {
+    const e = [0, 0, 0]; e[j] = L * 1.04;
+    const b = pr(e);
+    halo(ctx, P.labels[j], b[0], b[1], C['ink-2'], FONT.label);
+  }
+  for (let j = 0; j < 3; j++) {
+    const a = pr(u[j].map(v => -1.6 * lim * v)), b = pr(u[j].map(v => 1.6 * lim * v));
+    ctx.strokeStyle = rgba(C.u[j], .38); ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  if (st.showPC) {
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = C.pin; ctx.lineWidth = 1.3;
+    for (let j = 0; j < 3; j++) {
+      const v = col(P.V, j), a = pr(v.map(x => -L * x)), b = pr(v.map(x => L * x));
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (let j = 0; j < 3; j++) { const b = pr(col(P.V, j).map(x => L * 1.02 * x)); halo(ctx, 'PC' + (j + 1), b[0], b[1], C['ink-2'], FONT.label); }
+  }
+  const o = pr([0, 0, 0]);
+  const tips = [0, 1, 2].map(j => { const Lj = 2 * Math.sqrt(Math.max(S.v[j], 0)); return [j, pr(u[j].map(v => Lj * v)), pr(u[j].map(v => (Lj + 0.35 * lim / 1.6) * v))]; });
+  tips.sort((a, b) => b[1][2] - a[1][2]);
+  for (const [j, t] of tips) arrow(ctx, o[0], o[1], t[0], t[1], C.u[j], 2.6);
+  for (const [j, , l] of tips) halo(ctx, 'u' + SUB[j], l[0], l[1], C.ink, FONT.vec);
+  hit.main = pts;
+}
+
+/* ---------- readouts ---------- */
+function matTable(M, heads, d, kind) {
+  const p = M.length;
+  let s = '<table class="mat"><tr><th></th>' + heads.map(x => `<th>${esc(x)}</th>`).join('') + '</tr>';
+  for (let i = 0; i < p; i++) {
+    s += `<tr><th class="rh">${esc(heads[i])}</th>`;
+    for (let j = 0; j < p; j++) {
+      if (i === j) s += `<td class="diag" style="--c:${kind === 'new' ? 'var(--u' + (i + 1) + ')' : 'var(--axis)'}">${fmt(M[i][j], d)}</td>`;
+      else { const r = Math.abs(M[i][j]) / Math.sqrt(M[i][i] * M[j][j]); s += `<td style="--a:${(4 + 26 * r).toFixed(1)}%">${fmt(M[i][j], d)}</td>`; }
+    }
+    s += '</tr>';
+  }
+  return s + '</table>';
+}
+function combo(v, labels) {
+  return v.map((x, i) => {
+    const sgn = x < 0 ? '−' : '+', a = Math.abs(x).toFixed(3);
+    return (i === 0 ? (x < 0 ? '−' : '') : ` ${sgn} `) + `<span class="num">${a}</span>·${esc(labels[i])}`;
+  }).join('');
+}
+function updateReadout(P, U, S) {
+  const p = P.p, d = P.decs, ys = [...Array(p).keys()].map(j => 'y' + SUB[j]);
+  $('budget').innerHTML =
+    `<div class="brow"><span>this basis</span><div class="bar">${S.v.map((v, j) => `<span style="--c:var(--u${j + 1}); flex:${Math.max(v, 0)} 1 0"></span>`).join('')}</div></div>` +
+    `<div class="brow"><span>PCA basis</span><div class="bar ref">${P.lam.map((v, j) => `<span style="--c:var(--u${j + 1}); flex:${Math.max(v, 0)} 1 0"></span>`).join('')}</div></div>`;
+  let t = '<tr><th>axis</th><th>variance</th><th>share</th><th>PCA (λ)</th></tr>';
+  for (let j = 0; j < p; j++) t += `<tr><td><span class="sw" style="--c:var(--u${j + 1})"></span>${ys[j]}</td><td>${fmt(S.v[j], d)}</td><td>${pct(S.v[j], P.total)}</td><td class="lam">${fmt(P.lam[j], d)} · ${pct(P.lam[j], P.total)}</td></tr>`;
+  t += `<tr class="tot"><td>total</td><td>${fmt(S.v.reduce((a, b) => a + b, 0), d)}</td><td>100%</td><td class="lam">${fmt(P.total, d)}</td></tr>`;
+  $('vt').innerHTML = t;
+  const what = p === 2 ? 'every angle' : 'every rotation';
+  $('totalNote').innerHTML = `The total is <b>trace(${P.std ? 'R' : 'S'}) = ${fmt(P.total, d)}</b> at ${what}. Rotating moves variance between the axes. PCA puts as much as it can on <span class="m">y</span>₁, then as much of the rest as it can on <span class="m">y</span>₂.`;
+
+  const Rname = P.std ? 'R' : 'S';
+  $('matRTitle').textContent = P.std ? 'Correlation matrix R of the data' : 'Covariance matrix S of the data';
+  $('matCTitle').textContent = `Covariance of the new coordinates, Uᵀ${Rname}U`;
+  $('matR').innerHTML = matTable(P.S, P.labels, d, 'orig');
+  $('matC').innerHTML = matTable(S.C, ys, d, 'new');
+  let worst = 0, wi = 0, wj = 1;
+  for (let i = 0; i < p; i++) for (let j = i + 1; j < p; j++) {
+    const r = Math.abs(S.C[i][j]) / Math.sqrt(S.C[i][i] * S.C[j][j]);
+    if (r > worst) { worst = r; wi = i; wj = j; }
+  }
+  const sortedV = S.v.every((v, j) => j === 0 || S.v[j - 1] >= v - 1e-9 * P.total);
+  const status = $('status');
+  if (worst < 0.003 && sortedV) { status.className = 'status good'; status.innerHTML = `<span class="ic">✓</span> PCA basis: uncorrelated and sorted by variance (Uᵀ${Rname}U = Λ)`; }
+  else if (worst < 0.003) { status.className = 'status'; status.innerHTML = `<span class="ic">~</span> Uncorrelated, but not in PCA order: the variances are not largest first`; }
+  else { status.className = 'status'; status.innerHTML = `<span class="ic">≠</span> Still correlated: corr(${ys[wi]}, ${ys[wj]}) = ${fmt(S.C[wi][wj] / Math.sqrt(S.C[wi][wi] * S.C[wj][wj]), 3)}`; }
+
+  // Basis vectors as columns, laid out like R's prcomp()$rotation (variables down the side).
+  const vecTable = (M, heads, cls) => '<table class="mat"><tr><th></th>' + heads.join('') + '</tr>' +
+    P.labels.map((l, i) => `<tr><th class="rh">${esc(l)}</th>` + M[i].map(v => `<td class="${cls}">${fmt(v, 3)}</td>`).join('') + '</tr>').join('') + '</table>';
+  const uHeads = [...Array(p).keys()].map(j => `<th><span class="sw line" style="--c:var(--u${j + 1})"></span>u${SUB[j]}</th>`);
+  const vHeads = [...Array(p).keys()].map(j => `<th>PC${j + 1}</th>`);
+  $('loads').innerHTML = `<div class="tabs">${vecTable(U, uHeads, '')}${vecTable(P.V, vHeads, 'pcv')}</div>` +
+    `<div class="formula"><span class="m">y</span>₁ = ${combo(col(U, 0), P.labels)}</div>`;
+  $('rcode').innerHTML = rCode(P, U, S);
+}
+function rCode(P, U, S) {
+  const sc = P.std ? '' : ', scale = FALSE';
+  const zl = P.sim ? `z  <- scale(x${sc})` : `z  <- scale(city_sust[, c(${P.rnames.map(r => `"${r}"`).join(', ')})]${sc})`;
+  const vec = v => `c(${v.map(x => fmt(x, 3).replace('−', '-')).join(', ')})`;
+  const lam = P.lam.map(v => fmt(v, P.decs)).join(' ');
+  const lines = [[zl, P.sim ? 'x: the simulated n × 3 data' : (P.std ? 'standardize' : 'center only')]];
+  if (P.p === 2) {
+    lines.push([`u1 <- ${vec(col(U, 0))}`, `current u₁ (θ = ${deg(st.theta)})`]);
+    lines.push(['var(z %*% u1)', fmt(S.v[0], P.decs)]);
+  } else {
+    lines.push([`U  <- cbind(${[0, 1, 2].map(j => vec(col(U, j))).join(', ')})`, 'current u₁, u₂, u₃']);
+    lines.push(['diag(cov(z %*% U))', S.v.map(v => fmt(v, P.decs)).join(' ')]);
+  }
+  lines.push(['eigen(cov(z))$values', lam]);
+  lines.push(['prcomp(z)$rotation', 'PC directions (signs may flip)']);
+  const wcol = Math.max(...lines.map(l => l[0].length)) + 3;
+  return lines.map(([c, cm]) => esc(c.padEnd(wcol)) + `<span class="cm"># ${esc(cm)}</span>`).join('\n');
+}
+function legend(P) {
+  const items = [`<span class="li"><span class="sw dot"></span>${P.sim ? 'simulated point' : 'city'} (n = ${P.n})</span>`];
+  for (let j = 0; j < P.p; j++) items.push(`<span class="li"><span class="sw arrow" style="--c:var(--u${j + 1})"></span><span class="m">u</span>${SUB[j]}${j === 0 ? ', arrow length = 2 SD of the data along it' : ''}</span>`);
+  if (st.showPC) items.push(`<span class="li"><span class="sw dash"></span>PC directions</span>`);
+  if (st.proj[st.mode]) items.push(P.p === 2 ? `<span class="li"><span class="sw seg2"></span>projection onto <span class="m">u</span>₁</span>` : `<span class="li"><span class="sw plane"></span>plane of <span class="m">u</span>₁, <span class="m">u</span>₂ and drops onto it</span>`);
+  $('legend').innerHTML = items.join('');
+}
+
+/* ---------- render ---------- */
+function render() {
+  const P = data(), U = basis(), S = computeStats(P, U);
+  if (st.mode === '2d') { drawMain2D(P, U, S); drawScores(P, U, S); }
+  else { drawMain3D(P, U, S); drawScores(P, U, S); }
+  updateReadout(P, U, S);
+  legend(P);
+  st.lastStats = S;
+}
+let raf = 0, last = 0;
+function request() { if (!raf) raf = requestAnimationFrame(tick); }
+function tick(t) {
+  raf = 0;
+  const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+  last = t;
+  let more = false;
+  if (st.playing) { advance(dt); more = true; }
+  if (st.anim) { if (st.anim(t)) st.anim = null; else more = true; syncSliders(); }
+  render();
+  if (more) request(); else last = 0;
+}
+function advance(dt) {
+  if (st.mode === '2d') { st.theta = (st.theta + 24 * dt) % 360; }
+  else {
+    st.tumble += dt;
+    const k = unit([0.55 * Math.cos(0.23 * st.tumble), 0.55 * Math.sin(0.23 * st.tumble), 1]);
+    st.U3 = reortho(matMul(rotAxis(k, 22 * D2R * dt), st.U3));
+  }
+  syncSliders();
+}
+function syncSliders() {
+  if (st.mode === '2d') { $('theta').value = st.theta; $('thetaOut').textContent = deg(st.theta); return; }
+  st.ang = anglesOf(st.U3, st.ang);
+  ['phi', 'psi', 'omega'].forEach((id, i) => { $(id).value = st.ang[i] * R2D; $(id + 'Out').textContent = deg(st.ang[i] * R2D); });
+}
+function setPlaying(on) {
+  st.playing = on;
+  $('play').textContent = on ? '❚❚ Pause' : '▶ Rotate';
+  $('play').setAttribute('aria-pressed', on);
+  if (on) { st.anim = null; request(); }
+}
+const ease = t => t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+function animateTo(target) {
+  setPlaying(false);
+  if (st.mode === '2d') {
+    const from = st.theta, delta = ((target - from + 540) % 360) - 180;
+    const dur = reduceMotion ? 0 : 350 + 4 * Math.abs(delta), t0 = performance.now();
+    st.anim = now => { const f = dur ? clamp((now - t0) / dur, 0, 1) : 1; st.theta = ((from + delta * ease(f)) % 360 + 360) % 360; return f >= 1; };
+  } else {
+    const qa = quatOf(st.U3), qb = quatOf(target), ang = 2 * Math.acos(clamp(Math.abs(dot(qa, qb)), 0, 1)) * R2D;
+    const dur = reduceMotion ? 0 : 350 + 5 * ang, t0 = performance.now();
+    st.anim = now => { const f = dur ? clamp((now - t0) / dur, 0, 1) : 1; st.U3 = f >= 1 ? target : reortho(matOf(slerp(qa, qb, ease(f)))); return f >= 1; };
+  }
+  request();
+}
+function snapToPCs() {
+  const P = data();
+  if (st.mode === '2d') {
+    const ths = (Math.atan2(P.V[1][0], P.V[0][0]) * R2D + 360) % 180;
+    const cands = [ths, ths + 180], dist = a => Math.abs(((a - st.theta + 540) % 360) - 180);
+    animateTo(cands.sort((a, b) => dist(a) - dist(b))[0]);
+  } else {
+    const v = [0, 1, 2].map(j => col(P.V, j));
+    const flips = [[1, 1, 1], [-1, -1, 1], [-1, 1, -1], [1, -1, -1]];
+    let best = null, bestScore = -Infinity;
+    for (const f of flips) {
+      const T = fromCols(v.map((x, j) => x.map(y => y * f[j])));
+      const score = [0, 1, 2].reduce((s, j) => s + dot(col(st.U3, j), col(T, j)), 0);
+      if (score > bestScore) { bestScore = score; best = T; }
+    }
+    animateTo(best);
+  }
+}
+
+/* ---------- mode & data controls ---------- */
+function applyMode() {
+  const is2 = st.mode === '2d';
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === st.mode));
+  $('sliders2').hidden = !is2; $('sliders3').hidden = is2;
+  $('cvMain').classList.toggle('orbit', !is2);
+  $('hintMain').textContent = is2 ? 'Drag to aim u₁' : 'Drag to turn the view';
+  $('scoreTitle').textContent = is2 ? 'New coordinates' : 'Projection onto the u₁–u₂ plane';
+  $('projLabel').textContent = is2 ? 'Show projections onto u₁' : 'Show the u₁–u₂ plane and drops onto it';
+  $('showProj').checked = st.proj[st.mode];
+  const sel = $('dataset');
+  sel.innerHTML = DATASETS[st.mode].map(d => `<option value="${d.id}">${esc(d.label)}</option>`).join('');
+  sel.value = st.ds[st.mode];
+  st.hover = -1; hideTips();
+  syncSliders();
+  request();
+}
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  if (st.mode === b.dataset.mode) return;
+  setPlaying(false); st.anim = null; st.mode = b.dataset.mode; applyMode();
+}));
+$('dataset').addEventListener('change', e => { st.ds[st.mode] = e.target.value; st.hover = -1; request(); });
+$('std').addEventListener('change', e => { st.std = e.target.checked; request(); });
+$('showPC').addEventListener('change', e => { st.showPC = e.target.checked; request(); });
+$('showProj').addEventListener('change', e => { st.proj[st.mode] = e.target.checked; request(); });
+$('play').addEventListener('click', () => setPlaying(!st.playing));
+$('snap').addEventListener('click', snapToPCs);
+$('reset').addEventListener('click', () => animateTo(st.mode === '2d' ? 0 : eye(3)));
+$('theta').addEventListener('input', e => { setPlaying(false); st.anim = null; st.theta = +e.target.value % 360; $('thetaOut').textContent = deg(st.theta); request(); });
+['phi', 'psi', 'omega'].forEach((id, i) => $(id).addEventListener('input', e => {
+  setPlaying(false); st.anim = null;
+  st.ang[i] = +e.target.value * D2R; $(id + 'Out').textContent = deg(+e.target.value);
+  st.U3 = frameMat(...st.ang); request();
+}));
+
+/* ---------- pointer interaction ---------- */
+function nearest(pts, x, y, r = 9) {
+  if (!pts) return -1;
+  let best = -1, bd = r * r;
+  for (let i = 0; i < pts.length / 2; i++) { const dx = pts[i*2] - x, dy = pts[i*2 + 1] - y, d = dx*dx + dy*dy; if (d < bd) { bd = d; best = i; } }
+  return best;
+}
+function hideTips() { ['tipMain', 'tipScore'].forEach(id => $(id).hidden = true); }
+function showTip(tip, wrap, x, y, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const W = wrap.clientWidth, tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = clamp(x + 14 + tw > W ? x - tw - 14 : x + 14, 0, Math.max(0, W - tw)) + 'px';
+  tip.style.top = clamp(y - th - 10 < 0 ? y + 14 : y - th - 10, 0, Math.max(0, wrap.clientHeight - th)) + 'px';
+}
+function pointTip(i) {
+  const P = data(), S = st.lastStats, p = P.p;
+  const name = P.names ? P.names[i] : `Simulated point ${i + 1}`;
+  const raw = P.labels.map((l, j) => `${l} ${P.cols[j][i].toFixed(3)}`).join(' · ');
+  const ys = [...Array(p).keys()].map(j => `y${SUB[j]} ${fmt(S.Y[i*p + j], 2)}`).join(' · ');
+  return `<b>${esc(name)}</b><span class="num">${esc(raw)}</span><span class="num">${ys}</span>`;
+}
+function bindHover(cv, tipId, key) {
+  cv.addEventListener('pointerleave', () => { if (!drag) { st.hover = -1; $(tipId).hidden = true; request(); } });
+  cv.addEventListener('pointermove', e => {
+    if (drag) return;
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const i = nearest(hit[key], x, y);
+    if (i !== st.hover) { st.hover = i; request(); }
+    if (i >= 0) showTip($(tipId), cv.parentElement, x, y, pointTip(i)); else $(tipId).hidden = true;
+  });
+}
+let drag = null;
+const cvMain = $('cvMain');
+cvMain.addEventListener('pointerdown', e => {
+  cvMain.setPointerCapture(e.pointerId); hideTips();
+  drag = {x: e.clientX, y: e.clientY};
+  if (st.mode === '2d') { setPlaying(false); st.anim = null; aimAt(e); }
+  else cvMain.classList.add('dragging');
+});
+cvMain.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (st.mode === '2d') aimAt(e);
+  else orbit(e);
+});
+const endDrag = () => { drag = null; cvMain.classList.remove('dragging'); };
+cvMain.addEventListener('pointerup', endDrag); cvMain.addEventListener('pointercancel', endDrag);
+function aimAt(e) {
+  const r = cvMain.getBoundingClientRect(), F = plotFrame(r.width, r.height, data().lim);
+  const dx = e.clientX - r.left - F.cx, dy = F.cy - (e.clientY - r.top);
+  if (Math.hypot(dx, dy) < 4) return;
+  st.theta = (Math.atan2(dy, dx) * R2D + 360) % 360;
+  syncSliders(); request();
+}
+function orbit(e) {
+  st.yaw -= (e.clientX - drag.x) * 0.009;
+  st.pitch = clamp(st.pitch + (e.clientY - drag.y) * 0.009, -1.45, 1.45);
+  drag.x = e.clientX; drag.y = e.clientY;
+  request();
+}
+bindHover(cvMain, 'tipMain', 'main');
+bindHover($('cvScore'), 'tipScore', 'score');
+
+cvMain.addEventListener('keydown', e => {
+  if (st.mode !== '2d') return;
+  const step = e.shiftKey ? 10 : 1;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { st.theta = (st.theta - step + 360) % 360; }
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { st.theta = (st.theta + step) % 360; }
+  else return;
+  e.preventDefault(); setPlaying(false); syncSliders(); request();
+});
+
+/* ---------- boot ---------- */
+readTokens();
+const mq = matchMedia('(prefers-color-scheme: dark)');
+(mq.addEventListener ? mq.addEventListener('change', () => { readTokens(); request(); }) : mq.addListener(() => { readTokens(); request(); }));
+new MutationObserver(() => { readTokens(); request(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme', 'class', 'style']});
+new ResizeObserver(() => request()).observe(document.querySelector('.stage'));
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => request());
+
+// Deep links for iframes in the slides: ?mode=3d&data=pancake&std=0&theta=45&pcs=0&proj=1&play=1&compact=1, or #2d / #3d.
+const q = new URLSearchParams(location.search), hash = location.hash.replace('#', '');
+if (q.get('mode') === '3d' || hash === '3d') st.mode = '3d';
+const dq = q.get('data');
+if (dq) for (const m of ['2d', '3d']) if (DATASETS[m].some(d => d.id === dq)) { st.ds[m] = dq; st.mode = m; }
+if (q.get('std') === '0') { st.std = false; $('std').checked = false; }
+if (q.get('pcs') === '0') { st.showPC = false; $('showPC').checked = false; }
+if (q.has('proj')) st.proj[st.mode] = q.get('proj') === '1';
+if (q.has('theta') && isFinite(+q.get('theta'))) st.theta = ((+q.get('theta') % 360) + 360) % 360;
+if (q.get('compact') === '1') document.body.classList.add('compact');
+applyMode();
+if (q.get('play') === '1') setPlaying(true);
+})();
+</script>
+</body>
+</html>

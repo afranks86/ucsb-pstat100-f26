@@ -1,0 +1,1179 @@
+---
+title: "Principal Component Analysis"
+format: 
+  revealjs:
+    theme: default
+    slide-number: true
+    preview-links: auto
+    fig-align: center
+    smaller: true
+    scrollable: true
+    html-math-method: mathjax
+execute:
+  echo: true
+  eval: true
+---
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(patchwork)
+city_sust = read_csv('data/uscity-sustainability-indices.csv')
+```
+
+## Week 6: Principal components
+
+- Covariation between variables
+
+- Eigendecomposition
+
+- Principal components analysis
+
+## Principal components
+
+**Objective**: introduce an exploratory technique for exploring covariation among several variables.
+
+
+**Covariation between variables**
+
+- What is covariation and how is it measured quantitatively?
+
+- Covariance and correlation
+
+- Correlation matrix
+
+- Heatmap visualization
+
+
+
+
+<!-- - **Principal components analysis** -->
+<!--     - What is PCA exactly? -->
+<!--     - PCA in the low-dimensional setting -->
+<!--     - Variation capture and loss -->
+<!--     - Interpreting principal components -->
+<!--     - Example application -->
+<!--     - AI text embeddings -->
+
+
+## Covariation between variables
+
+- What is covariation and how is it measured quantitatively?
+
+- Covariance and correlation matrices
+
+- Visualizations
+
+## City sustainability data
+
+We'll continue to use the following dataset on the sustainability of U.S. cities:
+
+```{r}
+print(city_sust)
+```
+
+## City sustainability data {.smaller}
+
+For each **M**etropolitan **S**tatistical **A**rea (MSA), a sustainability index is calculated based on economic, social, and environmental indicators (also indices).
+
+$$\text{sustainability index} = \text{economic} + \text{social} + \text{environmental}$$
+
+The domain indices are computed from a large number of development indicator variables. To keep the application simple, we'll work with this derived data instead of the underlying variables.
+
+_**If you're interested,**_ you can dig deeper on the [Sustainable Development Report website](https://www.sustainabledevelopment.report/), which provides detailed data reports related to the U.N.'s 2030 sustainable development goals.
+
+## What is covariation?
+
+Last week we talked about exploring variation among individual variables: the tendency of values to change between observations.
+
+**Covariation** refers to _**the tendency of variables to change together between observations**_. Covariation is about relationships.
+
+```{r}
+#| output-location: slide
+# scatterplot of social vs economic indices
+city_sust |> ggplot() + geom_point(aes(x=Econ_Domain, y=Social_Domain)) + theme_bw(base_size=16)
+```
+
+<!-- The social and economic indices do seem to *vary together*: higher values of the economic index coincide with higher values of the social index. -->
+
+<!-- That's all there is to it. -->
+
+## How is covariation measured?
+
+Let $(x_1, y_1) \dots, (x_n, y_n)$ denote $n$ values of two variables, $X$ and $Y$.
+
+If $X$ and $Y$ tend to vary together, then whenever $X$ is far from its mean, so is $Y$.
+
+- In other words, *a deviation in $x_i$ typically coincides with a deviation in $y_i$*.
+
+Mathematically the population covariance is defined as
+
+$$ E[(X - E[X])(Y - E[Y])] $$
+
+The population covariance can be estimated with the sample **covariance**:
+
+$$\text{cov}(\mathbf{x}, \mathbf{y}) = \frac{1}{n - 1}\sum_{i = 1}^n (x_i - \bar{x})(y_i - \bar{y})$$
+
+where $\mathbf{x} = (x_1, \dots, x_n)$ and $\mathbf{y} = (y_1, \dots, y_n)$ hold the observed values.
+
+## Covariation Example
+
+```{r}
+xy <- city_sust |> select(2:4) # x = econ, y = social
+xy_ctr <- xy |> mutate(across(Econ_Domain:Social_Domain, 
+                              \(x) x - mean(x)))
+xy_ctr
+```
+## Covariation Example
+
+```{r}
+xy_cov = sum(xy_ctr$Econ_Domain * xy_ctr$Social_Domain) / (nrow(xy_ctr) - 1)
+xy_cov
+```
+
+## Correlation: standardized covariance
+
+Covariance is a tricky to interpret. Is 0.00199 large or small?
+
+. . .
+
+It is more useful to compute the  **correlation**:
+
+$$\text{corr}(\mathbf{x}, \mathbf{y}) = \frac{\text{cov}(\mathbf{x}, \mathbf{y})}{s_x s_y}$$
+
+where $s_x$ and $s_y$ are the sample standard deviations.
+
+This is simply _**covariance standardized to [-1, 1]**_.
+
+## Correlation: standardized covariance {.smaller}
+
+Properties:
+
+- $\text{corr}(\mathbf{x}, \mathbf{x}) = 1$, since any variable's deviations coincide *perfectly* with themselves
+
+- the sign indicates whether $X$ and $Y$ vary together or in opposition
+
+- $\text{corr}(\mathbf{x}, \mathbf{y}) = 1, -1$ are the *strongest possible* correlations 
+
+- $\text{corr}(\mathbf{x}, \mathbf{y}) = 0$ is the weakest possible correlation
+
+- moderate to large correlations indicate that $X$ and $Y$ covary
+
+- small correlations *do not indicate* that $X$ and $Y$ don't covary
+
+## Correlation of social and economic indices
+
+Standardizing the covariance makes it more interpretable:
+
+```{r}
+xy_sd <- xy |> summarize(across(2:3, sd))
+xy_cov / prod(xy_sd) # cov(x, y)/(s_x * s_y)
+```
+
+The correlation indicates that the social and economic indices vary together (positive) weakly (moderate magnitude on [0, 1] scale). 
+
+_**This is just a number that quantifies what you already knew from the graphic**_: there is a positive relationship.
+
+## What is the use of a quantitative measure of covariation?
+
+It helps to have a number so that we can talk precisely about the *strength* of a relationship, and compare relationships quantitatvely.
+
+Consider looking at all pairwise relationships for patterns of covariation:
+
+```{r}
+#| output-location: slide
+GGally::ggpairs(city_sust |> select(3:6))
+```
+
+Is the economic index *more* related to the environmental index or the social index?
+
+## Correlation matrix (example)
+
+The pairwise correlations among all three variables can be represented in a simple square matrix:
+
+```{r}
+corr_mx <- cor(city_sust |> select(Econ_Domain:Env_Domain))
+corr_mx 
+```
+
+The strongest relationship is between social and economic indices; the weakest is between environmental and economic indices.
+
+_**Notice**_ the correspondence between this matrix and the scatterplot panel -- there is one number per plot that describes the strenth of the relationship shown visually.
+
+## Correlation matrix (definition)
+
+Let $\mathbf{X} \in \mathbb{R}^{n\times p}$ denote the data values for $n$ observations of $p$ variables, and let $\mathbf{Z}$ be the centered and scaled (standardized) version of the data, with entries $z_{ij} = (x_{ij} - \bar{x}_j)/s_j$.
+
+The (sample) **correlation matrix** is a simple matrix product:
+
+$$\mathbf{R} = \frac{1}{n - 1}\mathbf{Z}'\mathbf{Z}$$
+
+Why? Entry $(j, l)$ of $\mathbf{Z}'\mathbf{Z}$ is the dot product of columns $j$ and $l$ of $\mathbf{Z}$, so
+
+$$r_{jl} = \frac{1}{n - 1}\sum_{i = 1}^n z_{ij}\, z_{il}$$
+
+This is the covariance of the standardized variables $j$ and $l$, which is exactly their correlation.
+
+## Correlation matrix
+
+```{r}
+# correlation matrix 'by hand'
+x <- city_sust |> select(Econ_Domain:Env_Domain) # X
+n <- nrow(x) # sample size
+
+## center and scale
+z <- x |> mutate(across(everything(), \(col) (col - mean(col))/sd(col))) |>
+  as.matrix() # Z
+
+t(z) %*% z / (n - 1) # Z'Z/(n - 1)
+```
+
+## Visualizing correlation matrices
+
+Often it's useful to visualize the correlation matrix. We can do this with `ggplot` but for quick exploratory plots I prefer to use the `corrplot` function.
+
+```{r}
+library(corrplot)
+corrplot(corr_mx, method="ellipse")
+```
+
+# Eigendecomposition
+
+- The eigenvalue problem
+
+- Geometric interpretation
+
+- Computations
+
+## Why are we talking about eigendecomposition?
+
+PCA looks for the directions in which the data vary the most. Those directions turn out to be the **eigenvectors** of the correlation matrix, and the amount of variation along each one is its **eigenvalue**.
+
+PCA is useful for three reasons:
+
+- identifying which variables drive variation and covariation;
+
+- reducing correlation structure among many variables to simpler components;
+
+- visualizing multivariate data.
+
+## The eigenvalue problem
+
+Let $\mathbf{A}$ be a square $(p\times p)$ matrix.
+
+The **eigenvalue problem** refers to finding nonzero $\lambda$ and $\mathbf{v}$ that satisfy the equation:
+
+$$\mathbf{Av} = \lambda\mathbf{v}$$
+
+For any such solutions:
+
+- $\lambda$ is an **eigenvalue** of $\mathbf{A}$;
+
+- $\mathbf{v}$ is an **eigenvector** of $\mathbf{A}$.
+
+## Geometry
+
+For a simple example, suppose $p = 2$ and $\mathbf{v}$ is an eigenvector of $\mathbf{A}$. Then:
+
+$$
+\mathbf{Av}
+= \left[\begin{array}{cc}
+        a_{11} & a_{12} \\
+        a_{21} & a_{22}
+      \end{array}\right]
+      \left[\begin{array}{c}
+        v_1 \\ v_2
+      \end{array}\right]
+= \left[\begin{array}{c}
+        a_{11} v_1 + a_{12} v_2 \\
+        a_{21} v_1 + a_{22} v_2
+      \end{array}\right]
+= \left[\begin{array}{c}
+        \lambda v_1 \\ \lambda v_2
+        \end{array}\right]
+= \lambda\mathbf{v}
+$$
+
+So the eigenvalue problem equation says that the *linear transformation of $\mathbf{v}$ by $\mathbf{A}$* is simply a rescaling of $\mathbf{v}$ by a factor of $\lambda$.
+
+## Geometry
+<center><img src='figures/eigenvalue-wiki.png' style='width:300px'></center>
+
+## Eigenvectors of a correlation matrix
+
+If $\mathbf{v}$ is an eigenvector, so is any multiple $c\mathbf{v}$: it points along the same line. So we always scale eigenvectors to have **length 1**. (The sign is still arbitrary: $\mathbf{v}$ and $-\mathbf{v}$ point along the same line.)
+
+Finding all the eigenvalues and eigenvectors of a matrix is called its **eigendecomposition**.
+
+For a $p \times p$ correlation matrix $\mathbf{R}$, the eigendecomposition is especially nice:
+
+- There are $p$ eigenvectors $\mathbf{v}_1, \dots, \mathbf{v}_p$, and they are all **perpendicular** to one another.
+
+- The eigenvalues are all **nonnegative**. We order them from largest to smallest: $\lambda_1 \geq \lambda_2 \geq \dots \geq \lambda_p$.
+
+## Computations
+
+The eigendecomposition is computed numerically using iterative methods. Luckily, these are very easy to implement:
+
+```{r}
+# compute decomposition
+eig_decomp <- eigen(corr_mx)
+eig_decomp$values
+```
+
+```{r}
+V <- eig_decomp$vectors # eigenvectors, one per column
+V
+```
+
+## Checking the computations
+
+Each column of `V` satisfies the eigenvalue equation $\mathbf{Rv} = \lambda\mathbf{v}$:
+
+```{r}
+corr_mx %*% V[, 1]            # R v1
+eig_decomp$values[1] * V[, 1] # lambda1 * v1
+```
+
+The eigenvectors have length 1, and any two are perpendicular (their dot product is 0):
+
+```{r}
+sum(V[, 1]^2)                  # squared length of v1
+round(sum(V[, 1] * V[, 2]), 8) # dot product of v1 and v2
+```
+
+So $\mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3$ are perpendicular axes of length 1: an *orthonormal basis*.
+
+## What's a basis? {.smaller}
+
+A **basis** in linear algebra is a _**set of vectors that span a linear space**_. Think of a basis as a set of axes.
+
+The usual basis for $\mathbb{R}^3$ are the unit vectors:
+$$\mathbf{e}_1 = (1, 0, 0) \quad \mathbf{e}_2 = (0, 1, 0) \quad \mathbf{e}_3 = (0, 0, 1)$$
+
+Coordinates in $\mathbb{R}^3$ are usually represented as multiples of these basis vectors:
+$$(1, 2, 1) = 1\mathbf{e}_1 + 2\mathbf{e}_2 + 1\mathbf{e}_3$$
+
+**Terminology**:
+
+- A basis is *orthogonal* if *all basis vectors are at right angles to one another*.
+
+- A basis is *orthonormal* if *it is orthogonal and basis vectors are of unit length*.
+
+## Nonstandard bases
+
+To an extent the usual choice of $\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3$ is arbitrary.
+
+It's possible to choose *any* system based on three directions to represent the same point relative to the origin.
+
+<center><img src = 'figures/basis-wiki.png' style = 'width:150px'></center>
+
+## Interpreting a change of basis
+
+_**Different bases are simply different coordinate systems.**_
+
+It's akin to the possibility of locating the distance to the corner store by different units and relative to different directions. For example:
+
+- half a block to the right from the front door; or
+
+- sixty steps diagonally in a straight line; or
+
+- fifteen steps north, fifty steps east.
+
+## Principal components analysis
+
+- PCA as a change of coordinates
+
+- PCA in the low-dimensional setting
+
+- Variation capture and loss
+
+- Interpreting principal components
+
+- Example application
+
+- AI text embeddings
+
+## PCA as a change of coordinates
+
+Right now each city is described by its coordinates on the original axes: its (standardized) economic, social, and environmental indices.
+
+PCA describes _**the same variables on a new set of axes**_. A city's coordinate on each new axis is a **linear combination** of its original coordinates:
+
+$$
+\begin{aligned}
+\text{PC}_1 &= a_1 Z_1 + a_2 Z_2 + \dots + a_p Z_p \\
+\text{PC}_2 &= b_1 Z_1 + b_2 Z_2 + \dots + b_p Z_p \\
+&\;\;\vdots
+\end{aligned}
+$$
+
+where $Z_1, \dots, Z_p$ are the standardized variables (the columns of $\mathbf{Z}$).
+
+- For the cities ($p = 3$): $\text{PC}_1 = a_1 \, \text{Econ} + a_2 \, \text{Social} + a_3 \, \text{Env}$.
+
+- With $p$ variables we get $p$ new coordinates, $\text{PC}_1, \dots, \text{PC}_p$.
+
+- The coefficients $a_j, b_j, \dots$ are called **loadings**: they say how much each original variable contributes to each new coordinate.
+
+## Choosing the coefficients
+
+PCA picks the linear combinations in order:
+
+- $\text{PC}_1$ is the linear combination with the _**largest possible variance**_.
+
+- $\text{PC}_2$ has the largest variance among combinations perpendicular to $\text{PC}_1$, and so on.
+
+$$\text{Var}(\text{PC}_1) \geq \text{Var}(\text{PC}_2) \geq \dots \geq \text{Var}(\text{PC}_p)$$
+
+. . .
+
+The coefficients must satisfy two constraints:
+
+$$\sum_j a_j^2 = 1 \quad\text{and}\quad \sum_j b_j^2 = 1 \qquad\qquad \sum_j a_j b_j = 0$$
+
+- **Unit length**: otherwise we could inflate the variance by scaling up the coefficients.
+
+- **Orthogonal**: the new axes are perpendicular, like the original ones.
+
+So PCA is a _**change of coordinates**_: a rotation to a new **orthonormal basis**.
+
+## Same points, new axes
+
+Economic vs. social indices (standardized) with the PC axes in red. Rotating the plot so that the red lines become the axes gives each city's PC coordinates:
+
+```{r}
+#| echo: false
+#| fig-width: 10
+#| fig-height: 4.5
+z2_intro <- z[, c("Econ_Domain", "Social_Domain")]
+v_intro <- eigen(t(z2_intro) %*% z2_intro / (n - 1))$vectors
+pc_intro <- as_tibble(z2_intro %*% v_intro, .name_repair = ~ c("PC1", "PC2"))
+
+lims <- c(-5, 5)
+orig_panel <- as_tibble(z2_intro) |> ggplot() +
+  geom_point(aes(x = Econ_Domain, y = Social_Domain), size = 0.6, alpha = 0.6) +
+  geom_abline(slope = v_intro[2, 1] / v_intro[1, 1], intercept = 0, color = "red") +
+  geom_abline(slope = v_intro[2, 2] / v_intro[1, 2], intercept = 0, color = "red") +
+  annotate("text", x = 3.8, y = 3.8 * v_intro[2, 1] / v_intro[1, 1], label = "PC1",
+           color = "red", hjust = -0.1, vjust = 1.3) +
+  annotate("text", x = -3.8, y = -3.8 * v_intro[2, 2] / v_intro[1, 2], label = "PC2",
+           color = "red", hjust = 1.1, vjust = 1.3) +
+  coord_fixed(xlim = lims, ylim = lims) +
+  labs(title = "Original axes") + theme_bw(base_size = 14)
+
+pc_panel <- pc_intro |> ggplot() +
+  geom_hline(yintercept = 0, color = "red") + geom_vline(xintercept = 0, color = "red") +
+  geom_point(aes(x = PC1, y = PC2), size = 0.6, alpha = 0.6) +
+  coord_fixed(xlim = lims, ylim = lims) +
+  labs(title = "New axes") + theme_bw(base_size = 14)
+
+orig_panel + pc_panel
+```
+
+The data haven't changed, only the coordinate system. On the new axes, $\text{PC}_1$ carries most of the spread.
+
+## Eigenvectors and eigenvalues
+
+The best coefficients are the eigenvectors of the correlation matrix $\mathbf{R}$:
+
+- $(a_1, \dots, a_p) = \mathbf{v}_1$, the eigenvector with the largest eigenvalue;
+
+- $(b_1, \dots, b_p) = \mathbf{v}_2$, the eigenvector with the second-largest eigenvalue; and so on.
+
+The variance of each new coordinate is its eigenvalue:
+
+$$\text{Var}(\text{PC}_k) = \lambda_k$$
+
+The constraints hold automatically: the eigenvectors of $\mathbf{R}$ have length 1 and are perpendicular to one another.
+
+For a short proof, see the [optional appendix slide](#why-eigenvectors). Next, we'll check it numerically.
+
+## Checking with the city data
+
+`z` holds the standardized indices and `V` the eigenvectors (one per column) from earlier. Let's compare the variance of a few unit-length linear combinations:
+
+```{r}
+combos <- list(econ_only = c(1, 0, 0),
+               equal_weights = c(1, 1, 1) / sqrt(3),
+               v1 = V[, 1])
+sapply(combos, \(a) var(z %*% a))
+eig_decomp$values
+```
+
+Neither alternative beats $\mathbf{v}_1$, whose variance is exactly $\lambda_1$. The PCs are also uncorrelated, with the eigenvalues as their variances:
+
+```{r}
+cov(z %*% V) |> round(4) # covariances of PC1, PC2, PC3
+```
+
+## Principal components analysis
+
+**Principal components analysis** (PCA) consists in _**finding a linear transformation of one's data that captures covariation**_.
+
+Applications are varied, and so are descriptions of just what the method is supposed to do, but the core technique is simple:
+
+1. Compute the eigendecomposition of the correlation matrix.
+2. Choose a subset of eigenvectors.
+3. Then do other stuff (the 'analysis' part).
+
+**PCA terminology**:
+
+- The eigenvectors $\mathbf{v}_k$ are the 'principal component directions'
+
+- Their entries (the $a_j, b_j, \dots$ from before) are the 'loadings'
+
+- The new coordinates $\mathbf{Zv}_k$ are the 'principal components' (or 'PC scores')
+
+## PCA in the low-dimensional setting
+
+Let's carry out PCA by hand with just two variables: the economic and social indices from the picture, which were the most correlated pair in the example data.
+
+Take their two columns of $\mathbf{Z}$ and compute the eigendecomposition of their $2 \times 2$ correlation matrix. This is pretty much all there is to it.
+
+```{r}
+z2 <- z[, c("Econ_Domain", "Social_Domain")]
+
+R2 <- t(z2) %*% z2 / (n - 1)
+eig2 <- eigen(R2)
+
+evecs <- eig2$vectors
+evals <- eig2$values
+evecs
+evals
+```
+
+## The geometry of PCA
+
+Plot each eigenvector $\mathbf{v}_k$ scaled by twice the square root of its eigenvalue, $2\sqrt{\lambda_k}\mathbf{v}_k$:
+
+```{r}
+#| output-location: slide
+as_tibble(z2) |> ggplot() +
+  geom_point(aes(x=Econ_Domain, y=Social_Domain)) +
+  geom_segment(x=0, y=0,
+               xend=2*sqrt(evals[1])*evecs[1, 1],
+               yend=2*sqrt(evals[1])*evecs[2, 1],
+               col='red', arrow=arrow()) +
+  geom_segment(x=0, y=0,
+               xend=2*sqrt(evals[2])*evecs[1, 2],
+               yend=2*sqrt(evals[2])*evecs[2, 2],
+               col='red', arrow=arrow()) +
+  theme_bw() + coord_fixed()
+```
+
+Since $\lambda_k$ is the variance along $\mathbf{v}_k$, each arrow spans two standard deviations.
+
+*The principal component directions are the axes along which the data vary most, and the eigenvalues give the magnitude of that variation.*
+
+## Projection & Dimension Reduction
+
+To summarize each city with just *one* number that retains as much variation as possible, project the data onto the new basis (the 'New axes' panel from earlier) and keep the coordinate on the first PC direction:
+
+```{r}
+projected_data <- z2 %*% evecs # PC coordinates
+
+city_sust_with_pc <- city_sust |>
+  mutate(PC1 = projected_data[, 1], PC2 = projected_data[, 2]) |>
+  arrange(PC1) |>
+  select(Name, PC1, PC2, Econ_Domain, Social_Domain)
+
+head(city_sust_with_pc)
+```
+
+If we keep just the first principal component to 'do other stuff' with, we lose the variation in PC2. Is this a problem?
+
+## Projection & Dimension Reduction
+
+```{r}  
+tail(city_sust_with_pc)       
+```
+
+## Projection & Dimension Reduction
+
+```{r}
+head(city_sust_with_pc |> arrange(PC2))
+  
+tail(city_sust_with_pc |> arrange(PC2))       
+```
+
+## Quantifying variation capture/loss
+
+To figure out how much variation is captured and lost, we need to know how much is available in the first place.
+
+Each standardized variable has variance 1, so $p$ standardized variables have **total variation** $p$. Rotating the axes doesn't change the total spread of the points, so the PCs split this same total: $p = \lambda_1 + \dots + \lambda_p$.
+
+The **proportion of total variation explained** by the $k$th principal component (its *variance ratio*) is
+
+$$\frac{\lambda_k}{\lambda_1 + \dots + \lambda_p}$$
+
+For the economic and social indices, the total is 2, and PC1 gets $\lambda_1 = `r round(evals[1], 2)`$ of it:
+
+```{r}
+evals[1] / sum(evals)
+```
+
+The first principal component captures 77% of total variation.
+
+## Interpreting principal components
+
+So we have obtained a single derived variable that captures 3/4 of all variation and covariation in both variables. But what is this?
+
+Read it off the loadings in $\mathbf{v}_1$. For city $i$, with standardized indices $z_{i1}$ (economic) and $z_{i2}$ (social):
+$$\text{PC}_{1,i} = 0.7071 \, z_{i1} + 0.7071 \, z_{i2}$$
+
+The PC1 loadings are equal, so this principal component is proportional to the average of the standardized economic and social indices.
+
+## Example application
+
+Now that we've reviewed the basic technique, we can consider cases with a larger number of variables. 
+
+This is really where PCA is most useful.
+
+- It can help answer the question: which variables are driving variation in the data?
+
+- It can help reduce data dimensions by finding combinations of variables that preserve variation.
+
+- It can provide a means of visualizing high-dimensional data.
+
+## Example application
+
+So, let's look at a different example: world development indicators.
+
+```{r}
+wdi <- read_csv('data/wdi-data.csv') |> select(-1)
+wdi
+```
+
+## Correlation Plot
+
+```{r}
+country_corr <- cor(wdi |> select(inequality_adjusted_life:last_col()))
+corrplot(country_corr)
+```
+
+## Clustered Corrplot
+
+```{r}
+corrplot(country_corr, order='hclust')
+```
+
+## Computation via `prcomp`
+
+Luckily, `prcomp` is an easy-to-use implementation that saves the trouble of going through all the calculations we did before 'by hand'.
+
+```{r}
+pca_result <- 
+  wdi |> select(inequality_adjusted_life:last_col()) |> 
+  prcomp(x=_, scale=TRUE, )
+
+names(pca_result)
+```
+
+## Variance ratios
+
+Selecting the number of principal components to use is somewhat subjective, but always based on the variance ratios. 
+
+- how many PCs capture substantial variation individually before the variance ratio 'tails off'?
+
+- how many PCs are needed to capture a certain proportion of the total variation?
+
+## Variance Ratios
+
+This can be assessed by plotting the variance ratios and their cumulative sum:
+
+```{r}
+#| output-location: slide
+# store proportion of variance explained as a dataframe
+pcvars <- tibble(component=1:31,
+                 variance_explained = pca_result$sdev^2/sum(pca_result$sdev^2),
+                 cumulative_var_explained = cumsum(variance_explained))
+
+
+var_exp_plot <- pcvars |> ggplot() + 
+  geom_col(aes(x=component, y=variance_explained)) +
+  theme_bw() + ylab("Proportion of Variance Explained")
+
+cum_var_exp_plot <- pcvars |> ggplot() + 
+  geom_line(aes(x=component, y=cumulative_var_explained)) +
+  theme_bw() + ylab("Cumulative Variance Explained") + ylim(c(0, 1))
+
+var_exp_plot / cum_var_exp_plot
+
+```
+
+In this case, the variance ratios drop off after 2 components. These first two capture about half of total variation in the data.
+
+## Loading plots
+
+Examining the loadings can help address the question: *which variables drive variation in the data?*
+
+```{r}
+#| output-location: slide
+# store the loadings as a data frame with appropriate names
+loading_df <- pca_result$rotation |> 
+  as.data.frame() |>
+  rownames_to_column(var = "Measurement") 
+
+loading_df |> mutate(Measurement = fct_reorder(Measurement, PC1)) |>
+  ggplot() + geom_col(aes(x=Measurement, y=PC1)) + coord_flip() + 
+  ggtitle("PC1 Loadings") +
+  theme_bw()
+```
+
+## Loading Plots
+
+```{r}
+loading_df |> mutate(Measurement = fct_reorder(Measurement, PC2)) |>
+  ggplot() + geom_col(aes(x=Measurement, y=PC2)) + coord_flip() + 
+  ggtitle("PC2 Loadings") +
+  theme_bw() 
+```
+
+## Visualization
+
+Finally, we might want to use the first two principal components to visualize the data. Often it's helpful to merge the principal components with the original data and apply visualization techniques you already know to search for interesting patterns.
+
+```{r}
+#| output-location: slide 
+
+# project pcdata onto first two components; store as data frame
+projected_data <- pca_result$x |> as.data.frame() |> 
+  mutate(Country = wdi$country) 
+
+projected_data |> ggplot() + 
+  ggrepel::geom_text_repel(aes(x=PC1, y=PC2, label=Country), size=1.8) + theme_bw()
+```
+
+## WDI Data
+
+```{r}
+wdi |>
+  filter(country %in% c("Qatar", "United States", "Italy",
+                        "United Arab Emirates", "Madagascar")) |>
+  select(country, starts_with("labor"), ends_with("unemployment"))
+```
+
+## Genetics and Geography
+
+![](figures/geographyClustering.png){fig-align="center" height="520"}
+
+# Application: AI text embeddings
+
+- What is an embedding model?
+
+- Text as a vector in $\mathbb{R}^{4096}$
+
+- Using PCA to map meaning
+
+- Vector arithmetic with meaning
+
+```{r}
+#| echo: false
+# Embeddings were computed once with the embedder shown below (one text per
+# call) and cached, so the slides render without an API key or network access.
+texts <- read_csv('data/embedding-texts.csv') |> mutate(topic = fct_inorder(topic))
+emb_matrix <- readRDS('data/text-embeddings.rds')
+stopifnot(identical(rownames(emb_matrix), texts$text))
+
+pizza <- "Bake the pizza crust at 400 degrees"
+```
+
+## What is an embedding model?
+
+Computers can't do arithmetic on words. An **embedding model** is a neural network that _**turns a piece of text into a long vector of numbers**_.
+
+::: {style="text-align: center; font-size: 1.2em; margin: 0.5em 0;"}
+"`r pizza`"
+
+$\Big\downarrow$ &nbsp; embedding model
+
+$(`r paste(sprintf("%.3f", emb_matrix[pizza, 1:3]), collapse = ", ")`, \; \dots, \; `r sprintf("%.3f", emb_matrix[pizza, 4096])`) \in \mathbb{R}^{4096}$
+:::
+
+- The model is trained on enormous amounts of text so that _**texts with similar meanings get similar vectors**_, even when they share no words.
+
+- Embeddings are used in search engines, recommender systems, and chatbots that look up documents before answering.
+
+## Text as a point in $\mathbb{R}^{4096}$
+
+Embed $n$ texts and stack the vectors as rows: this gives a familiar data matrix $\mathbf{X} \in \mathbb{R}^{n \times 4096}$.
+
+- Each _**text is an observation**_ (row) and each of the 4096 _**coordinates is a variable**_ (column).
+
+- Unlike `Econ_Domain`, a single coordinate has no human meaning; only the distances and angles between vectors matter.
+
+- _**Similar meaning means similar direction**_: texts about the same thing point the same way in $\mathbb{R}^{4096}$, so we measure similarity by the angle between vectors.
+
+## Cosine similarity
+
+The **cosine similarity** of two vectors $\mathbf{x}$ and $\mathbf{y}$ is the cosine of the angle $\theta$ between them:
+
+$$\cos\theta = \frac{\mathbf{x}'\mathbf{y}}{\|\mathbf{x}\|\,\|\mathbf{y}\|} = \frac{\sum_{k=1}^{p} x_k y_k}{\sqrt{\sum_{k=1}^{p} x_k^2}\,\sqrt{\sum_{k=1}^{p} y_k^2}}$$
+
+:::: {.columns}
+::: {.column width="55%"}
+- Ranges from $-1$ to $1$: $1$ means the same direction, $0$ perpendicular, $-1$ opposite.
+
+- Depends only on direction, not length.
+
+- Embeddings have unit length ($\|\mathbf{x}\| = 1$), so cosine similarity is just the dot product $\mathbf{x}'\mathbf{y}$.
+
+- Embedding similarities are almost always positive; what matters is the comparison. Higher means closer in meaning.
+
+- **Look familiar?** Correlation is the cosine similarity of the *centered* vectors $\mathbf{x} - \bar{x}$ and $\mathbf{y} - \bar{y}$.
+:::
+
+::: {.column width="45%"}
+```{r}
+#| echo: false
+#| fig-width: 5.5
+#| fig-height: 3.4
+#| out-width: 100%
+angle_df <- tibble(
+  text = c(pizza, "Simmer the pasta sauce for twenty minutes",
+           "Taylor Swift", "x <- c(1, 2, 3); mean(x)"),
+  short = c("pizza crust", "pasta sauce", "Taylor Swift", "x <- c(1, 2, 3)")
+) |>
+  left_join(texts, by = "text") |>
+  mutate(sim = drop(emb_matrix[text, ] %*% emb_matrix[pizza, ]),
+         theta = acos(pmin(sim, 1)),
+         label = if_else(text == pizza, "pizza crust (reference)",
+                         sprintf("%s:  cos = %.2f  (%.0f°)", short, sim, theta * 180 / pi)))
+
+angle_df |> ggplot(aes(color = topic)) +
+  geom_segment(aes(x = 0, y = 0, xend = cos(theta), yend = sin(theta)),
+               arrow = arrow(length = unit(0.1, "inches")), linewidth = 1) +
+  geom_text(aes(x = cos(theta) + 0.04, y = sin(theta), label = label),
+            hjust = 0, size = 3.5) +
+  scale_color_discrete(drop = FALSE, guide = "none") +
+  coord_fixed(xlim = c(0, 1.9), ylim = c(-0.05, 1.05)) +
+  labs(title = "Angles from the pizza sentence") +
+  theme_void()
+```
+:::
+::::
+
+## Embedding text in R
+
+We'll embed 30 short texts from five topics with `qwen3-embedding-8b`, an open-weight embedding model hosted by UCSB:
+
+```{r}
+#| eval: false
+library(ragnar)
+
+embedder <- embed_openai(
+  model = "qwen3-embedding-8b",
+  base_url = "https://api.ai.college.ucsb.edu/v1",
+  api_key = Sys.getenv("UCSB_API_KEY") # never paste API keys into code
+)
+
+texts <- read_csv('data/embedding-texts.csv')
+emb_matrix <- embedder(texts$text) # one row per text
+```
+
+```{r}
+texts |> group_by(topic) |> slice_head(n = 2)
+```
+
+## The embedding matrix
+
+```{r}
+dim(emb_matrix)
+round(emb_matrix[1:3, 1:4], 4)
+range(rowSums(emb_matrix^2)) # every row has length 1
+```
+
+- $n = 30$ observations but $p = 4096$ variables: _**far more variables than observations**_.
+
+- After centering, $\mathbf{X}$ has rank at most $n - 1 = 29$, so at most 29 principal components have nonzero variance.
+
+## Similar meaning, similar direction
+
+Since every row has unit length, $\mathbf{XX}'$ holds all pairwise cosine similarities. Compare this to $\mathbf{Z'Z}$ for correlations!
+
+```{r}
+#| output-location: slide
+#| fig-height: 7
+sim_mx <- emb_matrix %*% t(emb_matrix)
+
+sim_by_topic <- sim_mx
+dimnames(sim_by_topic) <- list(texts$topic, texts$topic) # label by topic
+corrplot(sim_by_topic, is.corr = FALSE, method = "color", col = COL1("Blues"),
+         tl.cex = 0.8, tl.col = "black")
+```
+
+The blocks along the diagonal show that texts on the same topic point in similar directions.
+
+## Can we just plot two coordinates?
+
+With the cities, we plotted `Econ_Domain` against `Social_Domain`. Let's try the same with the embeddings: coordinates 1 and 2, plus three random pairs of coordinates.
+
+```{r}
+#| output-location: slide
+#| fig-height: 6
+plot_coords <- function(i, j) {
+  tibble(x = emb_matrix[, i], y = emb_matrix[, j], topic = texts$topic) |>
+    ggplot(aes(x = x, y = y, color = topic)) + geom_point(size = 2.5) +
+    labs(x = paste("coordinate", i), y = paste("coordinate", j)) + theme_bw()
+}
+
+set.seed(1)
+random_dims <- sample(4096, 6)
+plot_coords(1, 2) + plot_coords(random_dims[1], random_dims[2]) +
+  plot_coords(random_dims[3], random_dims[4]) +
+  plot_coords(random_dims[5], random_dims[6]) +
+  plot_layout(guides = "collect")
+```
+
+## PCA on the embeddings
+
+Each coordinate carries a little information about topic, but no pair of coordinates separates the topics. _**PCA combines all 4096 coordinates to find the few directions that capture the most variation.**_
+
+```{r}
+emb_pca <- prcomp(emb_matrix) # center, but don't scale
+summary(emb_pca)$importance[, 1:6] |> round(3)
+```
+
+- We don't standardize: all 4096 coordinates are already on the same scale (and standardizing gives nearly the same picture).
+
+- The first two PCs capture only `r round(100 * summary(emb_pca)$importance[3, 2])`% of total variation, much less than in the WDI example. Is that enough to see structure?
+
+## A map of meaning
+
+```{r}
+#| output-location: slide
+#| fig-height: 6
+emb_scores <- emb_pca$x |> as_tibble() |>
+  mutate(topic = texts$topic, text = texts$text)
+
+emb_scores |> ggplot(aes(x = PC1, y = PC2, color = topic)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(aes(label = text), size = 2.5, show.legend = FALSE) +
+  theme_bw()
+```
+
+## What did PCA find?
+
+The model was _**never told the topics**_, yet all five topics form their own clusters:
+
+- **PC1** runs from people (sports, celebrities) to technical writing (math, then R code).
+
+- **PC2** runs from food at one end to celebrities at the other, with sports in between.
+
+As with the cities, we interpret each PC by which observations score high or low. The loadings aren't useful here because the 4096 coordinates have no meaning.
+
+**Embedding search** skips PCA and uses all 4096 dimensions: return the texts with the highest cosine similarity to a query. The nearest neighbors of `library(tidyverse)`:
+
+```{r}
+sort(sim_mx["library(tidyverse)", ], decreasing = TRUE)[2:4] |> round(2)
+```
+
+## Beyond two components
+
+Same plot with `x = PC3, y = PC4`: PC3 pulls math apart from R code, and PC4 separates sports from food and celebrities.
+
+```{r}
+#| echo: false
+#| fig-height: 6
+emb_scores |> ggplot(aes(x = PC3, y = PC4, color = topic)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(aes(label = text), size = 2.5, show.legend = FALSE) +
+  theme_bw()
+```
+
+## Vector arithmetic
+
+:::: {.columns}
+::: {.column width="50%"}
+- For vectors $\mathbf{a}$ and $\mathbf{b}$, the difference $\mathbf{b} - \mathbf{a}$ is the arrow _**from $\mathbf{a}$ to $\mathbf{b}$**_.
+
+- Adding that arrow to another vector $\mathbf{c}$ moves $\mathbf{c}$ the same way: $\mathbf{c} + (\mathbf{b} - \mathbf{a})$ completes a parallelogram.
+
+- In embedding space, if the arrow from France to Paris means "capital of", then
+
+$$\text{Japan} + (\text{Paris} - \text{France})$$
+
+should land near Tokyo.
+:::
+
+::: {.column width="50%"}
+```{r}
+#| echo: false
+#| fig-width: 5.5
+#| fig-height: 4
+#| out-width: 100%
+corners <- tibble(word = c("France", "Paris", "Japan", "Japan + (Paris − France)"),
+                  x = c(0, 2.2, 0.5, 2.7), y = c(0, 0.7, 1.8, 2.5))
+capital_arrow <- tibble(x = c(0, 0.5), y = c(0, 1.8), xend = c(2.2, 2.7), yend = c(0.7, 2.5))
+side_arrow <- tibble(x = c(0, 2.2), y = c(0, 0.7), xend = c(0.5, 2.7), yend = c(1.8, 2.5))
+
+ggplot() +
+  geom_segment(data = side_arrow, aes(x = x, y = y, xend = xend, yend = yend),
+               linetype = "dashed", color = "grey60") +
+  geom_segment(data = capital_arrow, aes(x = x, y = y, xend = xend, yend = yend),
+               arrow = arrow(length = unit(0.12, "inches")), color = "firebrick", linewidth = 1) +
+  geom_point(data = corners, aes(x = x, y = y), size = 3) +
+  geom_text(data = corners, aes(x = x, y = y, label = word),
+            vjust = c(1.8, 1.8, -1, -1), size = 4) +
+  annotate("point", x = 2.95, y = 2.25, size = 3, color = "steelblue") +
+  annotate("text", x = 3.05, y = 2.1, label = "Tokyo?", hjust = 0, color = "steelblue", size = 4) +
+  annotate("text", x = 1.1, y = 0.1, label = "Paris − France", angle = 17.6,
+           color = "firebrick", size = 4) +
+  coord_fixed(xlim = c(-0.4, 3.6), ylim = c(-0.4, 3)) +
+  theme_void()
+```
+:::
+::::
+
+## Japan + (Paris − France) = ?
+
+We embed about 50 words and short phrases the same way, giving a matrix `word_emb` with one row per word. Now the vector arithmetic is just arithmetic on rows:
+
+```{r}
+#| echo: false
+word_emb <- readRDS('data/word-embeddings.rds') # cached like the texts above
+```
+
+```{r}
+# cosine similarity between a vector a and each row of a matrix B
+cosine_sim <- function(a, B) {
+  drop(B %*% a) / (sqrt(sum(a^2)) * sqrt(rowSums(B^2)))
+}
+
+target <- word_emb["Japan", ] + (word_emb["Paris", ] - word_emb["France", ])
+
+candidates <- c("Tokyo", "Kyoto", "Osaka", "Moscow", "Washington D.C.",
+                "California", "Oatmeal")
+tibble(candidate = candidates,
+       japan_alone = cosine_sim(word_emb["Japan", ], word_emb[candidates, ]),
+       japan_plus_arrow = cosine_sim(target, word_emb[candidates, ])) |>
+  arrange(desc(japan_plus_arrow))
+```
+
+`target` is not unit length, so we need the full cosine formula, not just the dot product.
+
+Tokyo wins. But Japan alone already ranks Tokyo first, so _**always compare to a baseline**_: adding the arrow raises every city and lowers California (a state) and Oatmeal.
+
+## tidyverse − R + Python = ?
+
+Same idea for programming tools: start from `tidyverse` (or `ggplot`), subtract R, and add Python.
+
+```{r}
+python_minus_r <- word_emb["Python language", ] - word_emb["R language", ]
+
+tools <- c("pandas", "numpy", "matplotlib", "plotly", "javascript", "bicycle")
+tibble(tool = tools,
+       python_alone = cosine_sim(word_emb["Python language", ], word_emb[tools, ]),
+       tidyverse_to_python = cosine_sim(word_emb["tidyverse", ] + python_minus_r,
+                                        word_emb[tools, ]),
+       ggplot_to_python = cosine_sim(word_emb["ggplot", ] + python_minus_r,
+                                     word_emb[tools, ]))
+```
+
+- Python alone is closest to matplotlib.
+
+- tidyverse − R + Python is closest to **pandas**: "tidyverse is to R as pandas is to Python."
+
+- ggplot − R + Python is closest to **plotly** and **matplotlib**, Python's plotting libraries.
+
+## Relationships are directions
+
+If "capital of" is a consistent direction, the arrows from each country to its capital should be parallel. Let's use PCA to look at 11 countries and their capitals in 2D:
+
+```{r}
+#| output-location: slide
+#| fig-height: 5.5
+capitals <- tibble(
+  country = c("France", "Japan", "Italy", "Germany", "Egypt", "Spain",
+              "Russia", "China", "Kenya", "Canada", "Mexico"),
+  capital = c("Paris", "Tokyo", "Rome", "Berlin", "Cairo", "Madrid",
+              "Moscow", "Beijing", "Nairobi", "Ottawa", "Mexico City")
+)
+
+cap_pca <- prcomp(word_emb[c(capitals$country, capitals$capital), ])
+cap_scores <- as_tibble(cap_pca$x[, 1:2]) |> mutate(word = rownames(cap_pca$x))
+
+capitals |>
+  left_join(cap_scores, by = c(country = "word")) |>
+  left_join(cap_scores, by = c(capital = "word"), suffix = c("", "_cap")) |>
+  ggplot() +
+  geom_segment(aes(x = PC1, y = PC2, xend = PC1_cap, yend = PC2_cap),
+               arrow = arrow(length = unit(0.1, "inches")), color = "grey60") +
+  geom_point(data = cap_scores, aes(x = PC1, y = PC2)) +
+  ggrepel::geom_text_repel(data = cap_scores, aes(x = PC1, y = PC2, label = word)) +
+  theme_bw()
+```
+
+## What the arrows show
+
+PC1 _**is**_ the "country → capital" direction: every arrow points the same way. We can check this in all 4096 dimensions with the cosine similarity between arrows:
+
+```{r}
+cap_arrows <- word_emb[capitals$capital, ] - word_emb[capitals$country, ]
+cap_arrows <- cap_arrows / sqrt(rowSums(cap_arrows^2)) # unit length
+arrow_sim <- cap_arrows %*% t(cap_arrows)              # pairwise cosine similarities
+mean(arrow_sim[upper.tri(arrow_sim)])
+```
+
+```{r}
+#| echo: false
+gender <- tibble(male = c("King", "Man", "Boy", "Uncle", "Prince"),
+                 female = c("Queen", "Woman", "Girl", "Aunt", "Princess"))
+gender_arrows <- word_emb[gender$female, ] - word_emb[gender$male, ]
+gender_arrows <- gender_arrows / sqrt(rowSums(gender_arrows^2))
+gender_sim <- gender_arrows %*% t(gender_arrows)
+
+royals <- c("Queen", "Princess", "Knight", "Prince")
+royal_scores <- cosine_sim(word_emb["King", ] - word_emb["Man", ] + word_emb["Woman", ],
+                           word_emb[royals, ]) |> sort(decreasing = TRUE)
+```
+
+Not every relationship is this clean:
+
+- Male → female arrows (King → Queen, Man → Woman, Boy → Girl, ...) have an average cosine similarity of only `r sprintf("%.2f", mean(gender_sim[upper.tri(gender_sim)]))`.
+
+- So with this model, the famous King − Man + Woman example lands closest to **`r names(royal_scores)[1]`**, then `r names(royal_scores)[2]`, with Queen only `r c("first", "second", "third", "fourth")[match("Queen", names(royal_scores))]`.
+
+Embeddings learn these directions from how people write, so they can also pick up stereotypes. Cosine similarities and directions like these are how researchers measure bias in AI models.
+
+## Summary
+
+Our focus this week was on introducing PCA as an exploratory technique for understanding covariation in mulitvariate data.
+
+By way of introduction, we discussed **covariation**, the tendency of values of multiple variables to change together.
+
+- Measures of covariation: covariance and correlation
+
+- Correlation matrices and heatmap visualization
+
+We then moved on to **eigendecomposition**, a method of factoring matrices.
+
+- For correlation (and covariance) matrices, eigendecomposition produces an orthonormal basis.
+
+- Representing the data on this basis -- a linear transformation -- 'captures' covariation.
+
+## Summary
+
+This provided the background needed to understand **principal components analysis** (PCA) -- a change of coordinates to new variables that are linear combinations of the originals, chosen to capture as much variation as possible.
+
+- The loadings are the eigenvectors of the correlation matrix, and the variances of the PCs are its eigenvalues.
+
+- Useful for identifying variables that drive covariation, and for visualizing multivariate data.
+
+- Works on modern AI data too: PCA on 4096-dimensional text embeddings reveals topics the model was never told about.
+
+# Appendix {visibility="uncounted"}
+
+## Why eigenvectors? {#why-eigenvectors visibility="uncounted"}
+
+The variance of a linear combination $\mathbf{Za}$ is
+
+$$\text{Var}(\mathbf{Za}) = \frac{1}{n - 1}\mathbf{a}'\mathbf{Z}'\mathbf{Z}\mathbf{a} = \mathbf{a}'\mathbf{R}\mathbf{a}$$
+
+Write $\mathbf{a}$ on the eigenvector basis: $\mathbf{a} = c_1\mathbf{v}_1 + \dots + c_p\mathbf{v}_p$. Because the eigenvectors are perpendicular with length 1, $\mathbf{a}$ has length 1 exactly when $c_1^2 + \dots + c_p^2 = 1$. And since each $\mathbf{Rv}_k = \lambda_k\mathbf{v}_k$, multiplying out gives
+
+$$\mathbf{a}'\mathbf{R}\mathbf{a} = c_1^2\lambda_1 + c_2^2\lambda_2 + \dots + c_p^2\lambda_p$$
+
+- This is a weighted average of the eigenvalues (the weights $c_k^2$ add to 1), so it is largest when all the weight is on $\lambda_1$: $\mathbf{a} = \mathbf{v}_1$, and $\text{Var}(\text{PC}_1) = \lambda_1$.
+
+- $\text{PC}_2$ must be perpendicular to $\mathbf{v}_1$, which forces $c_1 = 0$. The best we can do is $\mathbf{b} = \mathbf{v}_2$, and $\text{Var}(\text{PC}_2) = \lambda_2$.
