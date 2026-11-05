@@ -1,0 +1,507 @@
+---
+title: "Kernel Methods: Solutions with Detailed Explanations"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: false
+execute:
+  warning: false
+---
+
+## How to use this file
+
+Every exercise from `kernel_exercises.qmd` appears here with:
+
+1. **The goal**, restated in plain words
+2. **The solution code** (it runs as is)
+3. **A line-by-line explanation** of why it works
+4. **The answer** to each question
+
+The big picture of the three topics:
+
+| Topic | What we estimate | Core move |
+|---|---|---|
+| Kernel density | The shape of a distribution, $f(x)$ | Put a bump on each data point, then average the bumps |
+| Kernel smoothing | The trend, $m(x) = E[y \mid x]$ | Take a weighted average of nearby $y$'s |
+| Leave-one-out CV | The best bandwidth $h$ | Predict each point from all the others, then minimize the error |
+
+---
+
+## Setup
+
+```{r}
+#| label: setup
+set.seed(1)
+
+# Data for kernel density: a mix of two bumps
+# (100 points centred at -2 with sd 1, 100 centred at 3 with sd 1.5)
+z <- c(rnorm(100, mean = -2, sd = 1), rnorm(100, mean = 3, sd = 1.5))
+
+# Data for kernel smoothing: noisy sine curve
+n <- 100
+x <- sort(runif(n, 0, 10))
+y <- sin(x) + rnorm(n, sd = 0.4)
+
+plot(x, y, pch = 19, col = "grey40", main = "Noisy data")
+```
+
+**Explanation**
+
+- `set.seed(1)` makes the random numbers reproducible, so your plots match this file.
+- `z` is deliberately **bimodal** (two bumps). A good density estimate should show both bumps. A bad bandwidth will blur them together or create fake extra bumps.
+- `y = sin(x) + noise` means the **true** relationship is known: it's $\sin(x)$. That lets us check how well each smoother recovers the truth. In real data you never know the truth, which is exactly why we need cross validation (Part 3).
+
+---
+
+## Part 1: Kernel Density
+
+### The idea in plain words
+
+Imagine each data point is a pile of sand. A **kernel** describes the shape of the pile (a Gaussian bell, or a flat block). The **bandwidth** $h$ says how wide each pile is. The density estimate is the **total height of all the piles** at each location, rescaled so the total area is 1.
+
+$$\hat f(x_0) = \frac{1}{n h}\sum_{i=1}^n K\!\left(\frac{x_0 - x_i}{h}\right)$$
+
+Reading the formula from the inside out:
+
+- $x_0 - x_i$: the distance from the evaluation point to data point $i$.
+- Dividing by $h$: measures that distance **in units of bandwidth**. A distance of $h$ becomes $u = 1$.
+- $K(u)$: the pile height at that scaled distance. Close points contribute a lot, far points little (or nothing).
+- $\sum_i$ then $\frac{1}{n}$: average over all $n$ points.
+- The extra $\frac{1}{h}$: widening the piles by $h$ makes them $h$ times lower in area terms, so we divide by $h$ to keep the total area equal to 1.
+
+---
+
+### Solution 1.1: Define two kernels
+
+```{r}
+#| label: sol1-1
+gauss_k <- function(u) dnorm(u)
+rect_k  <- function(u) ifelse(abs(u) <= 1, 0.5, 0)
+```
+
+**Explanation**
+
+- `dnorm(u)` is the standard normal density, $\frac{1}{\sqrt{2\pi}} e^{-u^2/2}$. It is smooth and positive everywhere, so **every** data point contributes a little, however far away.
+- `rect_k` is a flat block of height 0.5 on $[-1, 1]$ and 0 elsewhere. Why 0.5? A kernel must integrate to 1, and the block has width 2, so height $\times$ width $= 0.5 \times 2 = 1$. 
+- `abs(u) <= 1` is vectorized: given a vector `u` it returns a vector of `TRUE`/`FALSE`, and `ifelse` turns that into a vector of 0.5's and 0's. This is what lets us pass whole vectors of distances in later.
+
+Quick check that both kernels really integrate to 1:
+
+```{r}
+#| label: sol1-1-check
+integrate(gauss_k, -Inf, Inf)$value
+integrate(rect_k, -2, 2)$value
+```
+
+Both are 1. This is the property that makes $\hat f$ a legitimate density.
+
+---
+
+### Solution 1.2: Density at one point
+
+```{r}
+#| label: sol1-2
+kde_at <- function(x0, data, h, K) {
+  mean(K((x0 - data) / h)) / h
+}
+
+kde_at(0, z, 0.5, gauss_k)
+kde_at(0, z, 0.5, rect_k)
+```
+
+**Explanation (line by line)**
+
+- `(x0 - data) / h`: a vector of $n$ scaled distances, one per data point.
+- `K(...)`: applies the kernel to each, giving $n$ "pile heights".
+- `mean(...)`: the $\frac{1}{n}\sum$ part.
+- `/ h`: the rescaling factor.
+
+**Interpreting the two numbers**
+
+- **Rectangle:** only data points within $h = 0.5$ of $x_0 = 0$ count, and each counts equally. So $\hat f(0) = \frac{\text{(number of points in window)}}{n \cdot 2h}$: the *fraction of data in the window divided by the window's width*. That's just a histogram-style density with a window centred on $x_0$.
+- **Gaussian:** every point counts, but nearby points count more. This usually gives a slightly different, smoother value.
+
+Verify the rectangle interpretation by hand:
+
+```{r}
+#| label: sol1-2-check
+h <- 0.5
+sum(abs(z - 0) <= h) / (length(z) * 2 * h)   # equals kde_at(0, z, 0.5, rect_k)
+```
+
+---
+
+### Solution 1.3: Density curve
+
+```{r}
+#| label: sol1-3
+grid  <- seq(-6, 8, length.out = 200)
+f_hat <- sapply(grid, kde_at, data = z, h = 0.5, K = gauss_k)
+
+plot(grid, f_hat, type = "l", lwd = 2, main = "KDE (Gaussian, h = 0.5)",
+     xlab = "x", ylab = "density")
+lines(density(z, bw = 0.5), col = "red", lty = 2)
+legend("topright", c("Our function", "density()"),
+       col = c("black", "red"), lty = c(1, 2), lwd = c(2, 1))
+```
+
+**Explanation**
+
+- `grid` is 200 evenly spaced evaluation points covering the data range.
+- `sapply(grid, kde_at, ...)` calls `kde_at` once for each grid point. The first argument of `kde_at` is `x0`, so `sapply` supplies each grid value there, and the named arguments (`data`, `h`, `K`) are passed along unchanged.
+- The red dashed line is R's built-in `density()` with the same Gaussian kernel and `bw = 0.5`. The two curves lie on top of each other (tiny differences exist because `density()` uses a fast approximation based on binning). This confirms that our hand-written formula is correct.
+- Notice the two bumps near $-2$ and $3$, matching how we generated `z`.
+
+---
+
+### Solution 1.4: Different bandwidths
+
+```{r}
+#| label: sol1-4
+#| fig-width: 9
+#| fig-height: 3.5
+par(mfrow = c(1, 3))
+for (h in c(0.1, 0.5, 3)) {
+  f <- sapply(grid, kde_at, data = z, h = h, K = gauss_k)
+  plot(grid, f, type = "l", lwd = 2, ylim = c(0, 0.35),
+       main = paste("h =", h), xlab = "x", ylab = "density")
+  rug(z)   # tick marks showing the actual data
+}
+par(mfrow = c(1, 1))
+```
+
+**Answer**
+
+- **`h = 0.1` is too wiggly (under-smoothed).** Each pile is so narrow that the curve has a spike at nearly every data point. It describes the *specific sample* rather than the underlying distribution. This is **high variance**: a new sample would give a very different curve.
+- **`h = 0.5` looks about right.** Two clear bumps, with a smooth shape.
+- **`h = 3` is too smooth (over-smoothed).** The piles are so wide that they melt into a single lump and the two-bump structure is lost. This is **high bias**: the estimate is systematically wrong about the shape.
+
+This is the **bias-variance trade-off** in one picture: small $h$ gives low bias but high variance; large $h$ gives low variance but high bias. Part 3 gives an automatic way to pick the sweet spot.
+
+---
+
+## Part 2: Kernel Smoothing
+
+### The idea in plain words
+
+Now we have pairs $(x_i, y_i)$ and want the trend. To estimate the trend at $x_0$:
+
+1. Look at the $y$-values of data points whose $x$ is **close** to $x_0$.
+2. Average them, giving closer points more say.
+
+$$\hat m(x_0) = \frac{\sum_i w_i\, y_i}{\sum_i w_i}, \qquad w_i = K\!\left(\frac{x_i - x_0}{h}\right)$$
+
+The denominator $\sum_i w_i$ **normalizes** the weights so they add to 1. That makes the result a true weighted average (an estimate on the same scale as $y$). This is called the **Nadaraya-Watson estimator**.
+
+---
+
+### Solution 2.1: Rectangle kernel = local average
+
+```{r}
+#| label: sol2-1
+x0 <- 5
+h  <- 1
+
+# Way 1: directly average y in the window
+way1 <- mean(y[abs(x - x0) <= h])
+
+# Way 2: using the kernel weights
+w    <- rect_k((x - x0) / h)
+way2 <- sum(w * y) / sum(w)
+
+c(way1 = way1, way2 = way2)
+all.equal(way1, way2)
+```
+
+**Explanation**
+
+- **Way 1:** `abs(x - x0) <= h` is a logical vector marking points inside the window $[4, 6]$. Using it to index `y` keeps just those $y$'s, and `mean` averages them.
+- **Way 2:** `w` is 0.5 for points inside the window and 0 outside.
+  - The numerator `sum(w * y)` adds up $0.5 \cdot y_i$ for the points inside (the others contribute 0).
+  - The denominator `sum(w)` is $0.5 \times (\text{number of points inside})$.
+  - The 0.5's **cancel** in the ratio, leaving $\frac{\sum_{\text{inside}} y_i}{\text{count inside}}$ = the plain average.
+- **Takeaway:** a rectangle-kernel smoother *is* "average the $y$'s in a window". The kernel formula is just a general way of writing this that also covers other shapes. (Because the constant height cancels, the 0.5 doesn't matter here. It only matters for density estimation, where we need the area to equal 1.)
+
+---
+
+### Solution 2.2: Gaussian kernel = weights
+
+```{r}
+#| label: sol2-2
+w <- gauss_k((x - x0) / h)
+sum(w * y) / sum(w)
+
+plot(x, w, pch = 19, main = "Gaussian weights at x0 = 5 (h = 1)",
+     xlab = "x", ylab = "weight")
+abline(v = x0, lty = 2, col = "red")
+```
+
+**Explanation**
+
+- Now `w` is not just 0 or 0.5. It forms a **bell shape** centred at $x_0 = 5$: the weight is largest for points with $x_i$ right next to 5 and shrinks smoothly to nearly 0 for far-away points.
+- `sum(w * y) / sum(w)` multiplies each $y_i$ by its weight, adds, and divides by the total weight. Points near $x_0$ dominate; distant points hardly matter.
+- **Answer to the question:** the points with $x$ closest to 5 get the largest weight (you can see the peak at the red line).
+- **Compared with the rectangle:** the rectangle makes a hard decision (in = full weight, out = zero). The Gaussian makes a soft one. Soft weights give a **smoother-looking curve**, because moving $x_0$ slightly never causes a point to suddenly jump in or out.
+
+---
+
+### Solution 2.3: Smoother function
+
+```{r}
+#| label: sol2-3
+smooth_at <- function(x0, x, y, h, K) {
+  w <- K((x - x0) / h)
+  sum(w * y) / sum(w)
+}
+
+grid  <- seq(0, 10, length.out = 200)
+m_hat <- sapply(grid, smooth_at, x = x, y = y, h = 0.5, K = gauss_k)
+
+plot(x, y, pch = 19, col = "grey60")
+lines(grid, m_hat, col = "blue", lwd = 2)
+lines(grid, sin(grid), col = "darkgreen", lty = 2)
+legend("topright", c("Smoother", "Truth"),
+       col = c("blue", "darkgreen"), lty = c(1, 2), lwd = c(2, 1))
+```
+
+**Explanation**
+
+- The function is just Solutions 2.1 and 2.2 in a box: compute weights, return the weighted average.
+- Evaluating at 200 grid points and joining them with `lines` traces out the whole estimated curve $\hat m(x)$.
+- The blue curve follows the green dashed truth well. It isn't perfect: the noise leaves small wobbles, and at the edges (near $x = 0$ and $x = 10$) there are fewer neighbours on one side, which causes some bias there. That edge effect is a known weakness of this simple estimator.
+
+Optional sanity check against R's built-in `ksmooth()`. Its bandwidth is scaled differently (for the normal kernel, the standard deviation is about `0.3706 * bandwidth`), so we convert:
+
+```{r}
+#| label: sol2-3-check
+ks <- ksmooth(x, y, kernel = "normal", bandwidth = 0.5 / 0.3706,
+              x.points = grid)
+plot(grid, m_hat, type = "l", lwd = 3, col = "blue",
+     main = "Our smoother vs ksmooth()")
+lines(ks$x, ks$y, col = "orange", lwd = 1.5, lty = 2)
+legend("topright", c("Ours", "ksmooth"),
+       col = c("blue", "orange"), lty = c(1, 2), lwd = c(3, 1.5))
+```
+
+The curves coincide, which confirms our implementation.
+
+---
+
+### Solution 2.4: Bandwidth effect
+
+```{r}
+#| label: sol2-4
+#| fig-width: 9
+#| fig-height: 3.5
+par(mfrow = c(1, 3))
+for (h in c(0.1, 0.5, 3)) {
+  fit <- sapply(grid, smooth_at, x = x, y = y, h = h, K = gauss_k)
+  plot(x, y, pch = 19, col = "grey60", main = paste("h =", h))
+  lines(grid, fit, col = "blue", lwd = 2)
+  lines(grid, sin(grid), col = "darkgreen", lty = 2)
+}
+par(mfrow = c(1, 1))
+```
+
+**Answer**
+
+- **Tiny $h$ (0.1): jagged curve that chases the noise.** Only one or two points have non-negligible weight, so the estimate is nearly "the nearest $y$". Each noisy point pulls the curve towards itself. (Under-smoothing: low bias, high variance.) As $h \to 0$ the fit passes through the data points exactly.
+- **Huge $h$ (3): nearly flat curve.** Almost all points get similar weights, so every estimate is close to the overall mean of $y$, which washes out the sine wave. (Over-smoothing: high bias, low variance.) As $h \to \infty$ the fit becomes a horizontal line at $\bar y$.
+- **Moderate $h$ (0.5): follows the sine wave while ignoring most noise.**
+
+---
+
+## Part 3: Leave-One-Out Cross Validation
+
+### Why we need it
+
+Looking at plots and saying "that one looks right" is subjective, and in real data we don't know the true curve. We need an **objective score** for each $h$.
+
+A tempting but **wrong** idea: pick the $h$ with the smallest error on the data we used to fit. This always chooses the tiniest $h$, because with $h \to 0$ the curve passes right through every point and the error is 0. That's overfitting.
+
+**LOOCV fixes this by testing on data the model hasn't seen.** For each point $i$:
+
+1. Remove point $i$ from the dataset.
+2. Fit the smoother on the other $n - 1$ points.
+3. Predict $y_i$ and record the squared error.
+
+$$\text{CV}(h) = \frac{1}{n}\sum_{i=1}^n \left(y_i - \hat m_{-i}(x_i)\right)^2$$
+
+($\hat m_{-i}$ means "the smoother fit without point $i$".)
+
+- Tiny $h$ now **fails**: predicting $y_i$ from only its nearest neighbour's noisy value is a poor guess, so the CV error is large.
+- Huge $h$ also fails: the flat curve misses the shape, so the error is large.
+- A moderate $h$ gives the smallest error. That is the one we pick.
+
+---
+
+### Solution 3.1: LOOCV error for one bandwidth
+
+```{r}
+#| label: sol3-1
+loocv <- function(h, x, y, K) {
+  n <- length(x)
+  errs <- sapply(1:n, function(i) {
+    pred <- smooth_at(x[i], x[-i], y[-i], h, K)   # leave i out
+    (y[i] - pred)^2
+  })
+  mean(errs)
+}
+
+loocv(0.5, x, y, gauss_k)
+```
+
+**Explanation (line by line)**
+
+- `sapply(1:n, function(i) {...})` loops over every point $i$.
+- `x[-i]` and `y[-i]` are the data **with the $i$-th element removed** (negative indexing in R means "everything except"). This is the "leave one out".
+- `smooth_at(x[i], x[-i], y[-i], h, K)` predicts the trend **at the left-out location** $x_i$ using only the remaining points.
+- `(y[i] - pred)^2` is the squared prediction error against the true held-out value.
+- `mean(errs)` averages over all $n$ points, giving $\text{CV}(h)$.
+
+The returned number is roughly the **typical squared prediction error** on new data. Since our noise has sd 0.4, the noise variance is $0.4^2 = 0.16$. A good CV value should be a little above that, because even a perfect smoother can't predict noise.
+
+---
+
+### Solution 3.2: Search over bandwidths
+
+```{r}
+#| label: sol3-2
+h_grid <- seq(0.05, 2, length.out = 40)
+cv     <- sapply(h_grid, loocv, x = x, y = y, K = gauss_k)
+
+plot(h_grid, cv, type = "b", pch = 19,
+     xlab = "bandwidth h", ylab = "LOOCV error")
+
+h_best <- h_grid[which.min(cv)]
+abline(v = h_best, col = "red", lty = 2)
+h_best
+```
+
+**Explanation**
+
+- `h_grid` is 40 candidate bandwidths.
+- `sapply(h_grid, loocv, ...)` computes $\text{CV}(h)$ for each candidate.
+- `which.min(cv)` gives the position of the smallest error, and `h_grid[...]` turns that position into the bandwidth value.
+
+**Reading the CV curve**
+
+- **Left side (small $h$):** the error is high, since the smoother is chasing noise (under-smoothing).
+- **Bottom of the "U":** the best trade-off, marked by the red line.
+- **Right side (large $h$):** the error rises again as the curve gets too flat (over-smoothing).
+
+The U-shape is the bias-variance trade-off drawn as an actual graph. The cost: LOOCV refits the smoother $n$ times per candidate $h$ (here $40 \times 100 = 4000$ fits). That's cheap for 100 points but can be slow for large datasets.
+
+---
+
+### Solution 3.3: Compare fits
+
+```{r}
+#| label: sol3-3
+grid <- seq(0, 10, length.out = 200)
+fit  <- function(h) sapply(grid, smooth_at, x = x, y = y, h = h, K = gauss_k)
+
+plot(x, y, pch = 19, col = "grey60")
+lines(grid, fit(0.05),   col = "orange", lwd = 2)
+lines(grid, fit(h_best), col = "blue",   lwd = 2)
+lines(grid, fit(3),      col = "red",    lwd = 2)
+lines(grid, sin(grid),   col = "darkgreen", lty = 2)
+legend("topright",
+       c("h = 0.05 (under)", "h = best", "h = 3 (over)", "truth"),
+       col = c("orange", "blue", "red", "darkgreen"),
+       lwd = c(2, 2, 2, 1), lty = c(1, 1, 1, 2))
+```
+
+**Explanation**
+
+- `fit(h)` is a small helper that returns the fitted curve for any bandwidth, so we don't repeat code.
+- **Orange (`h = 0.05`)**: jagged, hugging individual points: **under-smoothed**.
+- **Red (`h = 3`)**: almost flat: **over-smoothed**.
+- **Blue (`h_best`)**: follows the green truth closely. This is the result of choosing $h$ **objectively from the data alone**, without ever looking at the true curve.
+
+**Answer to the question: why does leaving point $i$ out matter?**
+
+If we did *not* leave it out, point $i$ would help predict **itself**. With $h \to 0$, the weight on point $i$ itself dominates everything, so the prediction becomes $\hat m(x_i) \approx y_i$ and the error goes to 0. The criterion would then reward the smallest possible $h$ (pure overfitting). Leaving $i$ out forces the model to predict a value it hasn't seen, which is an honest test of how it would perform on **new** data. That is what makes the criterion able to detect both over- and under-smoothing.
+
+---
+
+## Bonus Solutions
+
+### Bonus 1: LOOCV with the rectangle kernel
+
+```{r}
+#| label: sol-bonus1
+# Count how many left-out predictions fail because the window is empty
+count_empty <- function(h, x, y, K) {
+  n <- length(x)
+  sum(sapply(1:n, function(i) {
+    w <- K((x[-i] - x[i]) / h)
+    sum(w) == 0
+  }))
+}
+
+# CV error that ignores empty windows (NaN) and reports how many there were
+loocv_rect <- function(h, x, y) {
+  n <- length(x)
+  errs <- sapply(1:n, function(i) {
+    (y[i] - smooth_at(x[i], x[-i], y[-i], h, rect_k))^2
+  })
+  mean(errs, na.rm = TRUE)
+}
+
+h_small <- c(0.05, 0.1, 0.2, 0.5)
+data.frame(
+  h = h_small,
+  empty_windows = sapply(h_small, count_empty, x = x, y = y, K = rect_k)
+)
+```
+
+**What goes wrong?**
+
+With the rectangle kernel, when $h$ is very small some windows contain **no other data point**. Then `sum(w) = 0` and the formula becomes $0/0 = $ `NaN`. In the table, small $h$ yields many empty windows. Consequences:
+
+- The CV error is undefined for those points. If you use `mean(errs)` the result is `NaN`; if you use `na.rm = TRUE` you silently **drop** the hardest points, so tiny bandwidths look **better than they really are**. That makes the comparison unfair.
+- This is another practical advantage of the **Gaussian kernel**: its weights are never exactly zero, so the estimate is always defined.
+
+The CV curve for the rectangle kernel, restricted to $h$ values where every window is non-empty:
+
+```{r}
+#| label: sol-bonus1-plot
+h_grid2 <- seq(0.3, 2, length.out = 30)
+ok      <- sapply(h_grid2, count_empty, x = x, y = y, K = rect_k) == 0
+cv_rect <- sapply(h_grid2[ok], loocv_rect, x = x, y = y)
+
+plot(h_grid2[ok], cv_rect, type = "b", pch = 19,
+     xlab = "bandwidth h (rectangle kernel)", ylab = "LOOCV error")
+abline(v = h_grid2[ok][which.min(cv_rect)], col = "red", lty = 2)
+```
+
+The curve is typically more jagged than the Gaussian one, because points jump in and out of the window as $h$ changes.
+
+### Bonus 2: Compare with built-in bandwidth selectors
+
+```{r}
+#| label: sol-bonus2
+c(rule_of_thumb = bw.nrd0(z),
+  unbiased_cv   = bw.ucv(z))
+```
+
+**Explanation**
+
+- `bw.nrd0(z)` is Silverman's **rule of thumb**: a quick formula based on the sample's spread and size. It assumes the data is roughly bell-shaped, so it can over-smooth bimodal data like ours.
+- `bw.ucv(z)` is **unbiased cross validation**, which is essentially leave-one-out CV adapted to density estimation (it minimizes an estimate of the integrated squared error instead of the prediction error).
+- These are bandwidths for the **density** of `z`. Our `h_best` came from the **regression** problem with different data, so the numbers are not directly comparable. The point of the comparison is the *method*: both `bw.ucv` and our `loocv` choose $h$ by testing on left-out data.
+
+---
+
+## Summary cheat sheet
+
+| Concept | Formula / code idea | Remember |
+|---|---|---|
+| Kernel density | `mean(K((x0 - data)/h)) / h` | Average of bumps; divide by $h$ so the area is 1 |
+| Rectangle kernel smoother | Mean of $y$ in $[x_0 - h, x_0 + h]$ | Hard window; constant height cancels |
+| Gaussian kernel smoother | `sum(w*y)/sum(w)` with `w = dnorm((x - x0)/h)` | Soft weights; always defined |
+| Small $h$ | Wiggly, follows noise | Low bias, **high variance** (under-smoothing) |
+| Large $h$ | Flat, misses structure | High bias, **low variance** (over-smoothing) |
+| LOOCV | Fit without point $i$, predict $y_i$, average squared errors | Choose the $h$ at the bottom of the U-shaped CV curve |
