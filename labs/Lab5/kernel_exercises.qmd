@@ -1,0 +1,250 @@
+---
+title: "Kernel Methods: Easy Exercises"
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  warning: false
+---
+
+## Setup
+
+Run this chunk first. It makes two small datasets:
+
+- `z`: one variable (for **kernel density**)
+- `x`, `y`: a noisy curve (for **kernel smoothing** and **cross validation**)
+
+```{r}
+#| label: setup
+set.seed(1)
+
+# Data for kernel density: a mix of two bumps
+z <- c(rnorm(100, mean = -2, sd = 1), rnorm(100, mean = 3, sd = 1.5))
+
+# Data for kernel smoothing: noisy sine curve
+n <- 100
+x <- sort(runif(n, 0, 10))
+y <- sin(x) + rnorm(n, sd = 0.4)
+
+plot(x, y, pch = 19, col = "grey40", main = "Noisy data")
+```
+
+---
+
+## Part 1: Kernel Density
+
+**Idea:** Put a small "bump" (the kernel) on every data point and average them.
+
+$$\hat f(x_0) = \frac{1}{n h}\sum_{i=1}^n K\!\left(\frac{x_0 - x_i}{h}\right)$$
+
+- $K$ = kernel function, $h$ = bandwidth (how wide each bump is)
+
+### Exercise 1.1: Define two kernels
+
+Fill in the blanks.
+
+- Gaussian kernel: `dnorm(u)`
+- Rectangle kernel: height 0.5 when $|u| \le 1$, otherwise 0
+
+```{r}
+#| label: ex1-1
+#| eval: false
+gauss_k <- function(u) ______
+rect_k  <- function(u) ifelse(______, 0.5, 0)
+```
+
+### Exercise 1.2: Density at one point
+
+Write a function that computes $\hat f(x_0)$, then evaluate it at $x_0 = 0$ with $h = 0.5$ for both kernels.
+
+```{r}
+#| label: ex1-2
+#| eval: false
+kde_at <- function(x0, data, h, K) {
+  # hint: mean(K((x0 - data) / h)) / h
+  ______
+}
+
+kde_at(0, z, 0.5, gauss_k)
+kde_at(0, z, 0.5, rect_k)
+```
+
+### Exercise 1.3: Density curve
+
+Evaluate your function on a grid and plot it. Then compare with R's built-in `density()`.
+
+```{r}
+#| label: ex1-3
+#| eval: false
+grid <- seq(-6, 8, length.out = 200)
+f_hat <- sapply(grid, kde_at, data = z, h = 0.5, K = gauss_k)
+
+plot(grid, f_hat, type = "l", lwd = 2, main = "KDE (Gaussian, h = 0.5)")
+lines(density(z, bw = 0.5), col = "red", lty = 2)   # should overlap
+```
+
+### Exercise 1.4: Try different bandwidths
+
+Plot the density for `h = 0.1`, `h = 0.5`, and `h = 3`. 
+
+**Question:** Which one is too wiggly (under-smoothed)? Which one hides the two bumps (over-smoothed)?
+
+*Your answer:*
+
+---
+
+## Part 2: Kernel Smoothing
+
+**Idea:** To estimate $y$ at a point $x_0$, take a **weighted average** of the $y_i$, giving more weight to points near $x_0$.
+
+$$\hat m(x_0) = \frac{\sum_i w_i\, y_i}{\sum_i w_i}, \qquad w_i = K\!\left(\frac{x_i - x_0}{h}\right)$$
+
+- **Rectangle kernel:** weights are equal inside the window, 0 outside. So $\hat m(x_0)$ is just the **average of the $y$'s** with $|x_i - x_0| \le h$.
+- **Gaussian kernel:** weights decay smoothly with distance. The estimate is just a **weighted average using those weights**.
+
+### Exercise 2.1: Rectangle kernel = local average
+
+Compute $\hat m(5)$ with $h = 1$ in two ways. They should match.
+
+```{r}
+#| label: ex2-1
+#| eval: false
+x0 <- 5
+h  <- 1
+
+# Way 1: directly average y in the window
+mean(y[______])        # hint: abs(x - x0) <= h
+
+# Way 2: using the kernel weights
+w <- rect_k((x - x0) / h)
+sum(w * y) / sum(w)
+```
+
+### Exercise 2.2: Gaussian kernel = weights
+
+Do the same with the Gaussian kernel. Which points get the largest weight?
+
+```{r}
+#| label: ex2-2
+#| eval: false
+w <- gauss_k((x - x0) / h)
+sum(w * y) / sum(w)
+
+plot(x, w, pch = 19, main = "Gaussian weights at x0 = 5")
+abline(v = x0, lty = 2)
+```
+
+### Exercise 2.3: Smoother function
+
+Wrap it into a function, then draw the fitted curve.
+
+```{r}
+#| label: ex2-3
+#| eval: false
+smooth_at <- function(x0, x, y, h, K) {
+  w <- K((x - x0) / h)
+  ______            # hint: sum(w * y) / sum(w)
+}
+
+grid  <- seq(0, 10, length.out = 200)
+m_hat <- sapply(grid, smooth_at, x = x, y = y, h = 0.5, K = gauss_k)
+
+plot(x, y, pch = 19, col = "grey60")
+lines(grid, m_hat, col = "blue", lwd = 2)
+lines(grid, sin(grid), col = "darkgreen", lty = 2)   # true curve
+legend("topright", c("Smoother", "Truth"),
+       col = c("blue", "darkgreen"), lty = c(1, 2), lwd = c(2, 1))
+```
+
+### Exercise 2.4: Bandwidth effect
+
+Re-draw the curve with `h = 0.1`, `h = 0.5`, and `h = 3`.
+
+**Question:** What happens to the curve when $h$ is tiny? When $h$ is huge?
+
+*Your answer:*
+
+---
+
+## Part 3: Leave-One-Out Cross Validation
+
+**Problem:** How do we pick $h$ without guessing?
+
+- $h$ too small → **under-smoothing** (follows the noise)
+- $h$ too large → **over-smoothing** (misses the real shape)
+
+**Idea (LOOCV):** For each point $i$:
+
+1. Remove point $i$ from the data.
+2. Predict $y_i$ using the remaining points.
+3. Record the squared error $(y_i - \hat m_{-i}(x_i))^2$.
+
+Average over all $i$. Pick the $h$ with the smallest error.
+
+$$\text{CV}(h) = \frac{1}{n}\sum_{i=1}^n \left(y_i - \hat m_{-i}(x_i)\right)^2$$
+
+### Exercise 3.1: LOOCV error for one bandwidth
+
+```{r}
+#| label: ex3-1
+#| eval: false
+loocv <- function(h, x, y, K) {
+  n <- length(x)
+  errs <- sapply(1:n, function(i) {
+    pred <- smooth_at(x[i], x[-i], y[-i], h, K)   # leave i out
+    ______                                        # hint: (y[i] - pred)^2
+  })
+  mean(errs)
+}
+
+loocv(0.5, x, y, gauss_k)
+```
+
+### Exercise 3.2: Search over bandwidths
+
+Compute the CV error for many values of $h$, plot it, and find the best one.
+
+```{r}
+#| label: ex3-2
+#| eval: false
+h_grid <- seq(0.05, 2, length.out = 40)
+cv     <- sapply(h_grid, loocv, x = x, y = y, K = gauss_k)
+
+plot(h_grid, cv, type = "b", pch = 19,
+     xlab = "bandwidth h", ylab = "LOOCV error")
+
+h_best <- h_grid[which.min(cv)]
+abline(v = h_best, col = "red", lty = 2)
+h_best
+```
+
+### Exercise 3.3: Compare fits
+
+Plot the smoother with `h = 0.05` (too small), `h_best`, and `h = 3` (too large) on the same data.
+
+```{r}
+#| label: ex3-3
+#| eval: false
+grid <- seq(0, 10, length.out = 200)
+fit  <- function(h) sapply(grid, smooth_at, x = x, y = y, h = h, K = gauss_k)
+
+plot(x, y, pch = 19, col = "grey60")
+lines(grid, fit(0.05),   col = "orange", lwd = 2)
+lines(grid, fit(h_best), col = "blue",   lwd = 2)
+lines(grid, fit(3),      col = "red",    lwd = 2)
+legend("topright",
+       c("h = 0.05 (under)", "h = best", "h = 3 (over)"),
+       col = c("orange", "blue", "red"), lwd = 2)
+```
+
+**Question:** In your own words, why does leaving point $i$ out matter? (Hint: what would happen with $h \to 0$ if you did *not* leave it out?)
+
+*Your answer:*
+
+---
+
+## Bonus (optional)
+
+1. Repeat Exercise 3.2 using the rectangle kernel. What can go wrong when $h$ is very small? (Hint: empty windows.)
+2. Compare your `h_best` with `bw.ucv(z)` / `bw.nrd0(z)` for the density data in Part 1.
