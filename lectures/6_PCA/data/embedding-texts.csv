@@ -1,0 +1,31 @@
+topic,text
+Food,Bake the pizza crust at 400 degrees
+Food,"Combine flour, sugar, and eggs in a bowl"
+Food,Simmer the pasta sauce for twenty minutes
+Food,Chop the onions and saute them in olive oil
+Food,Whisk the cream until stiff peaks form
+Food,Season the steak with salt and pepper before grilling
+R code,library(tidyverse)
+R code,df %>% filter(age > 30) %>% summarize(mean_income = mean(pay))
+R code,"ggplot(mtcars, aes(x = wt, y = mpg)) + geom_point()"
+R code,"x <- c(1, 2, 3); mean(x)"
+R code,"lm(mpg ~ wt + hp, data = mtcars)"
+R code,read_csv('data/wdi-data.csv') |> select(country)
+Math,$ax^2 + bx + c$
+Math,$$ \int ln(x) dx$$
+Math,$\sum_x x^2$
+Math,$e^{i\pi} + 1 = 0$
+Math,$\frac{d}{dx} \sin(x) = \cos(x)$
+Math,$\mathbf{Ax} = \lambda \mathbf{x}$
+Sports,The quarterback threw a 50-yard touchdown pass
+Sports,The referee called a foul near the penalty box
+Sports,He scored 30 points in the fourth quarter
+Sports,The pitcher struck out the side in the ninth inning
+Sports,She won the 100-meter sprint by a tenth of a second
+Sports,The goalie made a diving save in overtime
+Celebrities,Taylor Swift
+Celebrities,LeBron James
+Celebrities,Zendaya
+Celebrities,Beyonce
+Celebrities,Tom Hanks
+Celebrities,Bad Bunny
