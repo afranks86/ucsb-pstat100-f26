@@ -1,0 +1,354 @@
+---
+title: "PSTAT100 Lab6: Cross-Validation and PCA"
+format:
+  pdf:
+    pdf-engine: xelatex
+execute:
+  message: false
+  warning: false
+knitr:
+  opts_chunk:
+    comment: ""
+    fig.align: "center"
+    fig.width: 6
+    fig.height: 3.8
+params:
+  sol: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+sol <- params$sol
+```
+
+# Objectives
+
+This lab covers the following topics:
+
+- Cross-validation
+  - Why training error is misleading
+  - Leave-one-out cross-validation (LOOCV)
+  - $k$-fold cross-validation
+- Principal Component Analysis (PCA)
+  - The idea: summarize many variables with a few
+  - Why we standardize
+  - Loadings, scores, and proportion of variance explained
+  - Running PCA in R with `prcomp()`
+
+# Part 1: Cross-Validation
+
+## The problem: choosing a tuning parameter
+
+Many methods have a "knob" we have to set ourselves. For a kernel smoother, the knob is the bandwidth $h$:
+
+- Small $h$: the curve follows every bump in the data, including the noise (**overfitting**).
+- Large $h$: the curve is too flat and misses the real pattern (**underfitting**).
+
+We want the $h$ that predicts **new** data well. The problem is that we don't have new data. Cross-validation is a way to fake it using only the data we have.
+
+## Data
+
+We simulate data where we know the truth: $y = \sin(x) + \text{noise}$.
+
+```{r}
+set.seed(1)
+n <- 100
+x <- sort(runif(n, 0, 10))
+y <- sin(x) + rnorm(n, sd = 0.4)
+
+plot(x, y, pch = 19, col = "grey40", main = "Noisy data")
+lines(x, sin(x), col = "darkgreen", lty = 2)
+```
+
+We'll use a Gaussian kernel smoother: the estimate at $x_0$ is a weighted average of the $y$'s, with more weight on points whose $x$ is close to $x_0$.
+
+$$
+\hat{m}(x_0) = \frac{\sum_i w_i y_i}{\sum_i w_i}, \qquad w_i = K\!\left(\frac{x_i - x_0}{h}\right)
+$$
+
+```{r}
+gauss_k <- function(u) dnorm(u)
+
+smooth_at <- function(x0, x, y, h, K) {
+  w <- K((x - x0) / h)
+  sum(w * y) / sum(w)
+}
+```
+
+## Why not just use the training error?
+
+A natural idea: fit the smoother, then check how close it is to the data we used.
+
+$$
+\text{Training error}(h) = \frac{1}{n}\sum_{i=1}^n \big(y_i - \hat{m}(x_i)\big)^2
+$$
+
+```{r}
+train_err <- function(h, x, y, K) {
+  pred <- sapply(x, smooth_at, x = x, y = y, h = h, K = K)
+  mean((y - pred)^2)
+}
+
+h_grid <- seq(0.05, 2, length.out = 40)
+tr_err <- sapply(h_grid, train_err, x = x, y = y, K = gauss_k)
+
+plot(h_grid, tr_err, type = "b", pch = 19,
+     xlab = "bandwidth h", ylab = "Training error")
+```
+
+The training error keeps going down as $h$ gets smaller. With a tiny $h$, each point mostly predicts **itself**, so the error is almost 0. That's like grading a student using the exact questions they studied with: a perfect score doesn't mean they learned anything.
+
+**Key idea**: to judge a model fairly, test it on points it did **not** use for fitting.
+
+## Leave-one-out cross-validation (LOOCV)
+
+We hide one point, fit the model on the rest, and see how well it predicts the hidden point. Do this for every point and average the errors.
+
+For each $i = 1, \dots, n$:
+
+1. Remove point $i$.
+2. Fit the smoother on the other $n-1$ points.
+3. Predict $y_i$ and record the squared error.
+
+$$
+\text{CV}_{(n)}(h) = \frac{1}{n}\sum_{i=1}^n \big(y_i - \hat{m}_{-i}(x_i)\big)^2
+$$
+
+Here $\hat{m}_{-i}$ means "the smoother fit **without** point $i$".
+
+```{r}
+loocv <- function(h, x, y, K) {
+  errs <- sapply(1:length(x), function(i) {
+    pred <- smooth_at(x[i], x[-i], y[-i], h, K)   # x[-i]: all points except i
+    (y[i] - pred)^2
+  })
+  mean(errs)
+}
+
+cv_loo <- sapply(h_grid, loocv, x = x, y = y, K = gauss_k)
+
+plot(h_grid, cv_loo, type = "b", pch = 19,
+     xlab = "bandwidth h", ylab = "LOOCV error")
+abline(v = h_grid[which.min(cv_loo)], col = "red", lty = 2)
+h_grid[which.min(cv_loo)]
+```
+
+Now the curve is **U-shaped**:
+
+- Left side (small $h$): the hidden point can't predict itself anymore, so chasing noise is punished.
+- Right side (large $h$): the curve is too flat, so it misses the pattern.
+- Bottom of the U: the best trade-off. We pick this $h$.
+
+**Downside**: LOOCV refits the model $n$ times for **each** $h$. Here that's $40 \times 100 = 4000$ fits. For big data this is slow.
+
+## $k$-fold cross-validation
+
+Now, instead of hiding one point at a time, hide a whole **group** of points at a time.
+
+1. Randomly split the data into $k$ groups (called **folds**) $C_1, \dots, C_k$ of about equal size.
+2. For each fold $j$: fit on the other $k-1$ folds, then predict the points in fold $j$.
+3. Average the errors over all folds.
+
+$$
+\text{CV}_{(k)}(h) = \frac{1}{k}\sum_{j=1}^k \text{MSE}_j,
+\qquad
+\text{MSE}_j = \frac{1}{|C_j|}\sum_{i \in C_j} \big(y_i - \hat{m}_{-C_j}(x_i)\big)^2
+$$
+
+Every point is still used for testing exactly once. Things to know:
+
+- Only $k$ fits per $h$ (usually $k = 5$ or $10$) instead of $n$.
+- LOOCV is the special case $k = n$ (each fold is one point).
+- The result depends a little on how the folds were randomly split.
+
+```{r}
+k <- 5
+set.seed(100)
+fold <- sample(rep(1:k, length.out = n))   # randomly assign a fold label to each point
+table(fold)
+
+kfold_cv <- function(h, x, y, K, fold) {
+  mse <- sapply(1:max(fold), function(j) {
+    test <- fold == j                       # points in fold j
+    pred <- sapply(x[test], smooth_at, x = x[!test], y = y[!test], h = h, K = K)
+    mean((y[test] - pred)^2)
+  })
+  mean(mse)
+}
+
+kfold_cv(0.5, x, y, gauss_k, fold)
+```
+
+### Question 1: 5-fold CV vs. LOOCV
+
+Compute the 5-fold CV error for every bandwidth in `h_grid`. Plot it together with the LOOCV curve `cv_loo`. Which $h$ does 5-fold CV choose? How does it compare with LOOCV?
+
+YOUR ANSWER:
+
+```{r}
+#| eval: !expr "!sol"
+#| echo: !expr "!sol"
+# YOUR CODE HERE
+```
+
+
+# Part 2: Principal Component Analysis
+
+## The idea
+
+Suppose each observation has many variables. It is hard to look at 4, 10, or 100 variables at once. PCA finds a **few new variables** that keep most of the information.
+
+- Each new variable (a **principal component**, or PC) is a weighted sum of the original variables.
+- PC1 is the direction in which the data **spread out the most**.
+- PC2 is the direction with the most remaining spread, at a right angle (uncorrelated) to PC1. And so on.
+
+A picture to keep in mind: think of taking a photo of a 3D object. Some camera angles show the shape clearly; others hide it. PCA picks the angle that shows the most spread in the data.
+
+Why "spread" (variance)? A variable that is nearly the same for everyone tells us little. Directions with large variance are where observations differ the most, so they carry the most information.
+
+## Data: US Arrests
+
+The built-in `USArrests` dataset has, for each of the 50 US states in 1973:
+
+| Variable | Description | Units |
+|---|---|---|
+| `Murder` | Murder arrests | per 100,000 residents |
+| `Assault` | Assault arrests | per 100,000 residents |
+| `UrbanPop` | Urban population | percent |
+| `Rape` | Rape arrests | per 100,000 residents |
+
+```{r}
+head(USArrests, 4)
+```
+
+PCA is **unsupervised**: there is no response $y$. We only look at the relationships among the variables.
+
+## The math
+
+Let $\mathbf{X}$ be the $n \times p$ data matrix with centered (and usually scaled) columns. The first principal component is
+
+$$
+Z_1 = \phi_{11}X_1 + \phi_{21}X_2 + \cdots + \phi_{p1}X_p = \mathbf{X}\boldsymbol{\phi}_1 ,
+$$
+
+where the weights $\boldsymbol{\phi}_1$ are chosen to make $\operatorname{Var}(Z_1)$ as large as possible, with $\|\boldsymbol{\phi}_1\| = 1$. (Without this constraint we could make the variance huge just by making the weights huge.)
+
+The solution comes from the eigendecomposition of the sample covariance matrix $\mathbf{S} = \frac{1}{n-1}\mathbf{X}'\mathbf{X} = \boldsymbol{\Phi}\boldsymbol{\Lambda}\boldsymbol{\Phi}'$, with $\lambda_1 \ge \cdots \ge \lambda_p$:
+
+| Term | Formula | In plain words |
+|---|---|---|
+| **Loadings** | columns of $\boldsymbol{\Phi}$ | the weights: how much each original variable contributes to each PC |
+| **Scores** | $\mathbf{Z} = \mathbf{X}\boldsymbol{\Phi}$ | each observation's value on each PC (its new coordinates) |
+| **Variance of PC $m$** | $\lambda_m$ | how much spread PC $m$ captures |
+| **PVE** | $\lambda_m / \sum_{j=1}^p \lambda_j$ | the fraction of total spread PC $m$ captures |
+
+## Why scale?
+
+PCA looks for the variables with the most spread. But spread depends on **units**.
+
+```{r}
+apply(USArrests, 2, var)
+```
+
+`Assault` has over 300 times the variance of `Murder`. That's not because assault is "more important"; its numbers are just bigger. Without scaling, PC1 is basically just `Assault`:
+
+```{r}
+prcomp(USArrests, scale. = FALSE)$rotation[, 1]
+```
+
+So we **standardize** each column to mean 0 and variance 1 first. Then every variable starts on equal footing, and $\mathbf{S}$ becomes the correlation matrix.
+
+**Rule of thumb**: if the variables are in different units, scale them.
+
+## Running PCA with `prcomp()`
+
+```{r}
+pca_out <- prcomp(USArrests, center = TRUE, scale. = TRUE)
+```
+
+What's inside:
+
+- `pca_out$rotation`: loadings $\boldsymbol{\Phi}$ (one column per PC)
+- `pca_out$x`: scores $\mathbf{Z}$ (one row per state)
+- `pca_out$sdev`: standard deviation of each PC, $\sqrt{\lambda_m}$
+
+```{r}
+pca_out$rotation
+head(pca_out$x, 4)
+```
+
+How to read the loadings: in the PC1 column, all four weights have the same sign, and the three crime variables have the largest weights. So PC1 is mostly an average of the crime rates.
+
+## Checking against the eigendecomposition
+
+We get the same answer by hand:
+
+```{r}
+X <- scale(USArrests)        # center and scale each column
+eig <- eigen(cov(X))
+
+eig$values                   # lambda_1, ..., lambda_p
+pca_out$sdev^2               # same
+
+eig$vectors                  # same as pca_out$rotation, up to sign
+```
+
+Some columns have flipped signs. That's fine: $\boldsymbol{\phi}_m$ and $-\boldsymbol{\phi}_m$ point along the same line, so they describe the same direction.
+
+```{r}
+Z <- X %*% pca_out$rotation              # scores = data times loadings
+all.equal(unname(Z), unname(pca_out$x))
+```
+
+### Question 2: How many components?
+
+Compute the PVE of each component and its cumulative sum. Make a scree plot (PVE vs. component) and a cumulative PVE plot. How many components would you keep?
+
+*Hint*: look for an "elbow" in the scree plot, where adding another PC stops helping much.
+
+YOUR ANSWER:
+
+```{r}
+#| eval: !expr "!sol"
+#| echo: !expr "!sol"
+# YOUR CODE HERE
+```
+
+
+## The biplot
+
+A biplot puts two things on one picture:
+
+- **Names** (scores): where each state falls on PC1 and PC2.
+- **Red arrows** (loadings): how each original variable lines up with PC1 and PC2.
+
+How to read it:
+
+- Arrows pointing in a similar direction = variables that are positively correlated.
+- A state far along an arrow has a high value of that variable.
+- States close together have similar profiles.
+
+```{r}
+#| fig-width: 7
+#| fig-height: 6
+biplot(pca_out, scale = 0, cex = 0.6)
+```
+
+### Question 3: Interpret PC1 and PC2
+
+Using the loadings and the biplot: what does PC1 measure? What does PC2 measure? Where do Florida and North Dakota fall, and what does that say about them?
+
+YOUR ANSWER:
+
+
+# Summary
+
+- **Cross-validation**: training error always rewards overfitting, so we test on held-out data.
+  - LOOCV: hold out one point at a time ($n$ fits).
+  - $k$-fold CV: hold out one fold at a time ($k$ fits). Faster, and usually picks a similar answer.
+  - Pick the tuning parameter at the bottom of the U-shaped CV curve.
+- **PCA**: finds a few new variables (PCs) that capture most of the spread in the data.
+  - Loadings tell us what each PC means; scores tell us where each observation falls.
+  - The PCs are eigenvectors of the covariance matrix; the eigenvalues are their variances.
+  - Scale variables with different units first. Use the scree plot / cumulative PVE to choose how many PCs to keep.
