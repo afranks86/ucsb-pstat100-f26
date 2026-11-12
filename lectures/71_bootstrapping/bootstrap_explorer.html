@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Bootstrap Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;1,400;1,600&display=swap">
+<style>
+/* Layout: the same lab-instrument console as the Kernel Window and PCA Basis explorers. One tall canvas on the left reads top to
+   bottom like the Matryoshka dolls: population and our sample, one bootstrap sample drawn from it, and the pile of bootstrap
+   estimates. Control rail on the right with the live results. Color carries meaning: gold = the population (unknown in practice),
+   ink = our sample and theta-hat, teal = anything the bootstrap produced. Same colors as the lecture's hawk figures. */
+:root{
+  --bg:#eef1f3;
+  --surface:#fbfcfc;
+  --ink:#13171b;
+  --ink-2:#4b535b;
+  --muted:#7f878f;
+  --line:#d9dee2;
+  --grid:#e9ecef;
+  --axis:#b6bec5;
+  --chip:#e4e8eb;
+  --pt:#2b3238;
+  --pop:#c8921f;
+  --pop-ink:#8d6008;
+  --boot:#047c91;
+  --good:#1d6e46;
+  --good-bg:#e1f2e8;
+  --bad:#a63d26;
+  --bad-bg:#f7e4de;
+  --font-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-math:"STIX Two Text", "Cambria Math", "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0e10; --surface:#14171a; --ink:#eef1f3; --ink-2:#b7bec5; --muted:#868e96; --line:#272c31; --grid:#1f2428;
+    --axis:#3a4148; --chip:#22272c; --pt:#c9d0d6; --pop:#dca540; --pop-ink:#efc56c; --boot:#2db4c9;
+    --good:#6fd39c; --good-bg:#15301f; --bad:#f08a70; --bad-bg:#3a1d16; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c0e10; --surface:#14171a; --ink:#eef1f3; --ink-2:#b7bec5; --muted:#868e96; --line:#272c31; --grid:#1f2428;
+  --axis:#3a4148; --chip:#22272c; --pt:#c9d0d6; --pop:#dca540; --pop-ink:#efc56c; --boot:#2db4c9;
+  --good:#6fd39c; --good-bg:#15301f; --bad:#f08a70; --bad-bg:#3a1d16; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:14px 22px;
+}
+.app{max-width:1260px; margin:0 auto; display:grid; gap:12px}
+header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:10px 24px}
+.titles{min-width:0; display:grid; gap:2px}
+h1{margin:0; font-size:21px; font-weight:600; letter-spacing:-0.01em; text-wrap:balance}
+h1 .course{font-family:var(--font-mono); font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-left:8px; vertical-align:3px}
+.sub{margin:0; color:var(--ink-2); font-size:13px; max-width:86ch}
+body.compact .sub, body.compact h1 .course, body.compact .codeblock{display:none}
+.m{font-family:var(--font-math); font-style:italic; font-size:1.1em}
+.hat{position:relative; display:inline-block; line-height:1}
+.hat::after{content:""; position:absolute; left:60%; top:.04em; width:.25em; height:.25em; border-left:1.3px solid currentColor; border-top:1.3px solid currentColor; transform:translateX(-50%) rotate(45deg)}
+.seg{display:inline-flex; background:var(--chip); border-radius:8px; padding:3px; gap:2px; flex-wrap:wrap}
+.seg button{border:0; background:transparent; color:var(--ink-2); font:500 13px/1.2 var(--font-ui); padding:7px 11px; border-radius:6px; cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.08)}
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible{outline:2px solid var(--boot); outline-offset:2px}
+
+.workspace{display:grid; grid-template-columns:minmax(0,1fr) 306px; gap:12px; align-items:start}
+@media (max-width:920px){.workspace{grid-template-columns:minmax(0,1fr)}}
+.stage, .rail{background:var(--surface); border:1px solid var(--line); border-radius:10px}
+.stage{padding:12px 12px 14px; display:grid; gap:10px; min-width:0}
+.rail{padding:14px; display:grid; gap:18px; min-width:0}
+
+.legend{display:flex; flex-wrap:wrap; gap:4px 16px; font-size:12px; color:var(--ink-2); min-height:18px}
+.li{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.sw{display:inline-block; flex:none}
+.sw.dot{width:8px; height:8px; border-radius:50%; background:var(--c)}
+.sw.ring{width:8px; height:8px; border-radius:50%; border:1.6px solid var(--c)}
+.sw.area{width:16px; height:10px; border-top:1.5px solid var(--pop); background:color-mix(in srgb, var(--pop) 22%, transparent)}
+.sw.line{width:18px; border-top:2px solid var(--c)}
+.sw.line.dashed{border-top-style:dashed}
+.sw.bar{width:10px; height:10px; background:color-mix(in srgb, var(--boot) 55%, transparent)}
+
+.plotwrap{position:relative; min-width:0}
+canvas{display:block; width:100%; touch-action:manipulation}
+#cv{height:620px}
+.tip{position:absolute; pointer-events:none; z-index:2; background:var(--surface); color:var(--ink); border:1px solid var(--line);
+  box-shadow:0 4px 14px rgba(0,0,0,.14); border-radius:6px; padding:7px 9px; font-size:12px; line-height:1.4; max-width:280px}
+.tip b{font-weight:600; display:block; margin-bottom:2px}
+.tip .num{display:block; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-2); font-variant-numeric:tabular-nums}
+
+.codeblock{display:grid; gap:7px; border-top:1px solid var(--line); padding-top:12px; min-width:0}
+.eyebrow{font-family:var(--font-mono); font-size:10.5px; font-weight:500; letter-spacing:.09em; text-transform:uppercase; color:var(--muted)}
+.rcode{display:block; font-family:var(--font-mono); font-size:12px; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; overflow-x:auto; white-space:pre; color:var(--ink); line-height:1.55}
+.rcode .cm{color:var(--muted)}
+
+.group{display:grid; gap:9px}
+.group + .group{border-top:1px solid var(--line); padding-top:16px}
+select{font:500 13px/1.2 var(--font-ui); color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:7px; padding:7px 8px; width:100%}
+.note{margin:0; font-size:12px; color:var(--ink-2); line-height:1.45}
+.note b{font-weight:600; color:var(--ink)}
+.note code, .check code{font-family:var(--font-mono); font-size:11px; background:var(--chip); border-radius:3px; padding:0 3px}
+.check{display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--ink-2); cursor:pointer; line-height:1.35}
+.check input{margin:1px 0 0; accent-color:var(--boot)}
+.check.off{opacity:.45; cursor:default}
+.scrub{display:grid; grid-template-columns:52px minmax(0,1fr) 88px; align-items:center; gap:8px}
+.scrub label{font-size:12px; color:var(--ink-2)}
+.scrub input[type=range]{width:100%; min-width:0; accent-color:var(--boot)}
+.scrub output{font-family:var(--font-mono); font-size:12px; text-align:right; font-variant-numeric:tabular-nums; color:var(--ink-2)}
+.btns{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px}
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  font:500 12.5px/1 var(--font-ui); padding:8px 6px; border-radius:7px; cursor:pointer; white-space:nowrap; font-variant-numeric:tabular-nums}
+.btn:hover{background:var(--chip)}
+.btn:disabled{opacity:.45; cursor:default; background:var(--surface)}
+.btn.play{background:var(--ink); color:var(--surface); border-color:var(--ink)}
+.btn.play:hover{background:var(--ink-2); border-color:var(--ink-2)}
+.btn.ghost{border-color:transparent; color:var(--ink-2)}
+.btn.wide{grid-column:1 / -1}
+.samplebtns{display:flex; flex-wrap:wrap; gap:6px}
+.samplebtns .btn{flex:1 1 auto}
+.keys{font-size:11px; color:var(--muted)}
+.keys kbd{font-family:var(--font-mono); font-size:10.5px; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 4px; background:var(--surface); color:var(--ink-2)}
+
+table.vt{width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric:tabular-nums}
+table.vt td{padding:5px 3px; vertical-align:baseline; border-bottom:1px solid var(--grid)}
+table.vt td:first-child{color:var(--ink-2); padding-right:8px}
+table.vt td.v{text-align:right; font-family:var(--font-mono); font-size:12px; color:var(--ink); white-space:nowrap}
+table.vt td .s{display:block; font-size:11px; color:var(--muted); line-height:1.3}
+table.vt tr.sec td{border-bottom:0; padding:10px 3px 2px; font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+table.vt tr.sec td .sw{width:9px; height:9px; border-radius:2px; background:var(--c); margin-right:6px; vertical-align:-1px}
+table.vt tr.last td{border-bottom:0}
+.status{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; line-height:1.35; padding:3px 7px; border-radius:6px; background:var(--chip); color:var(--ink-2); font-family:var(--font-ui)}
+.status.good{background:var(--good-bg); color:var(--good); font-weight:500}
+.status.bad{background:var(--bad-bg); color:var(--bad); font-weight:500}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="titles">
+      <h1>Bootstrap Explorer <span class="course">PSTAT 100 · Week 7</span></h1>
+      <p class="sub">Draw <span class="m">n</span> observations from our own sample <b>with replacement</b>, recompute the statistic, and repeat. The spread of these bootstrap estimates <span class="m hat">θ</span>* estimates how much our estimate <span class="m hat">θ</span> would vary across new samples from the population, which in practice we never get to see.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Statistic" id="statSeg"></div>
+  </header>
+
+  <div class="workspace">
+    <section class="stage" aria-label="Population, sample, bootstrap sample and bootstrap distribution">
+      <div class="legend" id="legend"></div>
+      <div class="plotwrap">
+        <canvas id="cv" tabindex="0" aria-label="Three stacked panels: the population with our sample, the current bootstrap sample, and the histogram of bootstrap estimates"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <div class="codeblock"><div class="eyebrow">The same steps in R</div><code class="rcode" id="rcode"></code></div>
+    </section>
+
+    <aside class="rail" aria-label="Controls">
+      <div class="group">
+        <label class="eyebrow" for="dataset">Data</label>
+        <select id="dataset"></select>
+        <p class="note" id="dsNote"></p>
+        <div class="samplebtns">
+          <button type="button" class="btn" id="newSample">New sample from the population</button>
+          <button type="button" class="btn ghost" id="lectureSample" hidden>Back to the lecture's sample</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="eyebrow">Resample with replacement</div>
+        <div class="btns">
+          <button type="button" class="btn play" id="play" aria-pressed="false">▶ Play</button>
+          <button type="button" class="btn" id="drawOne">Draw one</button>
+          <button type="button" class="btn" id="drawFull">Full sample</button>
+          <button type="button" class="btn" id="add100">+100</button>
+          <button type="button" class="btn" id="add1000">+1,000</button>
+          <button type="button" class="btn ghost" id="reset">Reset</button>
+        </div>
+        <div class="scrub"><label for="speed">Speed</label><input type="range" id="speed" min="0" max="100" step="1" value="33"><output id="speedOut" for="speed"></output></div>
+        <div class="keys"><kbd>Space</kbd> play/pause · <kbd>→</kbd> draw one · <kbd>Enter</kbd> full sample</div>
+      </div>
+
+      <div class="group">
+        <div class="eyebrow">Show</div>
+        <label class="check" id="popWrap"><input type="checkbox" id="showPop" checked> <span>Population and its true value <span class="m">θ</span> (gold)</span></label>
+        <label class="check" id="truthWrap"><input type="checkbox" id="showTruth"> <span>True sampling distribution of <span class="m hat">θ</span>, from new samples of the population</span></label>
+        <label class="check" id="alignWrap"><input type="checkbox" id="align"> <span>Slide it over to <span class="m hat">θ</span> to compare spreads</span></label>
+        <label class="check"><input type="checkbox" id="showCI" checked> <span>95% percentile interval</span></label>
+      </div>
+
+      <div class="group">
+        <div class="eyebrow">Results</div>
+        <table class="vt" id="res"></table>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script id="boot-data" type="application/json">{"pois50":{"x":[2,2,3,5,2,5,6,4,3,1,2,1,4,2,4,3,4,8,2,4,6,2,4,1,2,2,0,2,5,2,3,3,3,1,5,4,4,1,4,2,5,3,4,3,3,4,0,3,4,4]},"pois500":{"x":[3,0,2,2,4,2,4,5,6,1,4,2,1,6,2,3,7,3,6,4,4,9,3,3,4,5,3,5,3,3,3,2,5,4,3,7,3,3,2,0,6,2,3,1,5,1,5,5,4,3,2,4,5,4,5,2,1,1,5,4,3,1,5,5,2,3,1,3,4,7,2,3,2,2,5,4,2,3,2,1,5,4,3,6,5,1,0,8,2,6,1,1,3,2,2,1,4,3,0,4,2,3,2,3,3,3,4,2,7,4,2,2,2,3,4,3,3,4,5,1,1,2,5,2,1,4,7,2,3,2,2,1,2,1,4,5,4,2,3,0,3,4,2,6,1,3,3,7,4,3,2,0,3,6,2,5,2,2,3,4,5,6,2,2,2,1,1,1,1,4,1,3,2,3,1,0,3,2,2,4,1,3,2,5,3,2,4,2,4,6,3,5,8,2,2,4,5,3,2,1,4,4,3,2,2,1,3,3,3,0,0,5,6,3,4,4,1,1,0,4,4,3,4,2,4,3,3,3,3,7,4,5,2,1,2,3,6,2,2,2,3,2,1,3,7,1,2,4,5,2,5,1,1,2,3,3,2,10,0,5,5,1,4,1,1,0,0,3,2,6,5,6,4,3,3,5,0,6,5,3,5,2,4,0,2,1,4,1,2,3,2,0,1,3,4,8,2,2,5,1,4,3,2,2,6,7,5,7,2,5,4,4,1,5,2,4,0,2,5,2,3,1,4,2,1,5,1,1,5,4,1,3,3,3,2,2,2,6,2,2,6,0,2,1,2,2,0,3,6,0,3,0,2,3,4,3,2,3,1,2,1,2,3,2,4,2,1,1,7,2,2,1,4,3,4,2,3,4,3,2,2,6,3,8,4,4,1,4,2,2,2,1,1,6,6,2,1,3,6,4,5,2,1,4,2,3,5,5,2,0,6,3,0,0,4,1,5,3,3,4,2,3,2,2,2,5,7,2,6,7,1,2,3,5,1,5,3,1,2,3,2,6,4,3,3,5,3,3,5,1,1,6,4,1,2,2,5,1,3,3,1,2,4,5,3,3,4,4,1,4,2,1,3,5,2,2,2,0,4,2,1,2,3,5,1,3,4,3,2,0,5,3,3,4,3,3,4,5,4,1]},"chisq8":{"x":[0.883955,1.628275,1.987763,4.225688,1.592583,6.699361,0.214133,0.19527,1.32198,3.300195,0.305638,4.983264,6.777321,0.544991,4.265797,2.827263,7.397893,0.987964,0.255658,3.977404,3.230807,1.760072,2.666461,0.342691,2.053897,4.158056,0.202616,0.299622,0.052414,2.007164,0.868717,2.621757,3.299275,0.533189,4.387191,0.450829,0.046641,5.550932,1.629671,2.984662,2.770836,1.170381,2.005857,0.439094,3.966781,1.790625,0.822883,7.183175,0.294875,1.671091,2.092905,0.562296,1.96754,4.449609,0.415413,0.66571,2.383403,1.520215,0.938543,0.744695,1.463871,14.242202,0.497764,2.043754,0.551091,0.188504,0.791953,1.277894,0.305238,4.107037,3.92333,1.401643,4.083623,3.742943,1.813772,3.30907,2.765988,5.68864,1.167075,4.091142,1.047936,1.334729,1.63476,1.460006,2.466203,0.985963,1.839438,4.03933,4.543934,2.242939,2.442035,0.073489,4.212587,0.601306,1.347622,1.396609,0.57944,2.206655,0.937015,2.154264,4.928648,1.506083,1.981104,0.483968,0.333859,0.026688,0.369583,2.884652,0.657781,4.849298,1.169891,3.08823,4.279981,0.318051,0.534195,0.226245,6.48213,1.119362,6.217451,2.997714,0.739377,4.248487,0.398667,0.130664,3.93301,0.520572,3.412964,2.869012,0.817637,2.375188,0.095321,0.23099,1.549507,0.23163,0.885807,0.55501,1.249042,3.785648,3.791581,0.504077,2.662588,0.142491,1.888358,3.650486,0.694768,1.249217,4.177566,2.069062,2.655592,3.240326,1.035177,2.59103,2.252504,0.302366,1.214409,0.504613,0.939228,2.641955,0.1102,0.66526,2.914247,0.148405,0.158083,0.207686,0.570853,1.598803,0.199609,3.731458,1.685627,0.225587,0.937961,3.090901,2.781042,0.283971,0.224673,5.274221,3.118149,1.450976,1.367959,0.894639,0.059747,2.464458,5.779353,2.39476,0.698717,5.141977,1.69823,0.233683,0.499359,0.749201,1.252327,1.508715,2.192273,2.796024,1.941627,3.701877,3.50494,0.910757,1.976049,0.641165]},"chisq1":{"x":[0.310283,3.764803,3.609025,1.672355,2.445087,2.31671,1.98004,0.614747,0.189238,0.314403,0.621611,0.937464,0.136395,2.498584,2.016263,2.72189,2.411976,1.108231,2.414005,3.124957,0.261552,0.438107,0.694439,0.859919,0.292415,1.683434,0.484817,3.160699,2.370512,0.780863,0.462173,1.942178,0.263145,7.528768,1.642251,0.321752,0.191503,4.05338,5.7617,0.548096,0.805604,0.945276,0.842906,0.22508,4.972193,6.432658,1.785527,0.247996,0.838571,0.012893,1.213659,0.840404,1.107898,0.340059,3.559904,2.390076,0.713652,2.016353,1.526291,3.068541,0.616083,2.12363,3.681611,0.146314,3.314324,2.235401,4.503142,1.945773,1.678603,2.411368,0.203163,0.126651,0.040279,5.060974,2.270412,2.701389,1.617119,4.793814,0.303013,1.036219,1.039233,8.587703,0.644226,1.204765,0.839058,3.80122,0.719561,0.045135,2.261809,0.89867,6.725312,1.892893,0.341634,0.079315,0.220046,0.466616,3.359539,0.868152,0.576804,0.150399,0.314382,0.540133,1.691538,0.690978,4.78794,2.406374,2.26303,0.379609,11.039029,5.436411,0.11773,1.750718,0.893866,2.026464,6.705105,2.868802,1.89467,0.876167,4.143747,0.210037,3.16611,0.976455,1.649337,0.23288,2.820327,5.135047,0.061267,0.079348,0.426316,1.662787,4.814574,4.502406,0.586776,4.415156,0.550003,1.91207,0.98114,2.738447,1.05292,0.060557,3.409421,1.138948,2.558047,3.578939,0.30726,4.471162,0.748033,3.426231,3.209851,1.825563,4.839663,0.665255,3.152537,0.992457,0.08027,1.341021,0.143383,0.047139,0.377948,0.861604,2.963827,1.201925,1.658715,0.903919,2.998134,1.119044,0.886699,1.973991,1.60015,0.489007,1.92984,0.039167,2.580136,4.910479,1.41838,0.492061,11.839373,0.667337,0.471254,8.25553,1.232804,3.237039,6.078718,0.045328,3.749615,0.254172,4.92386,0.729715,2.783381,1.707396,2.926682,0.524385,15.267874,5.096484,1.199176,2.375791,2.80691,0.929768,0.831764,0.067313]},"whelk":{"x":[22,32,88,60,44,35,12,14,23,33,19,139,125,90]},"hawks":{"pop":[58.087256,60.428036,57.389357,57.426918,57.566335,55.374269,54.722623,61.859149,57.029309,56.188861,55.947884,56.32657,55.580118,57.797491,57.766038,60.690319,58.584322,54.568171,60.139613,58.280071,55.105459,61.58169,54.762005,59.841026,61.233012,55.783665,52.647216,57.423462,52.275269,57.293029,59.929618,56.636549,58.83166,57.054575,60.511596,60.57047,62.050978,60.866421,59.41829,61.795975,52.000946,59.356446,57.040099,54.232077,60.481482,52.895126,59.727103,52.880734,54.064219,56.657323,60.72992,52.315175,62.459155,58.583206,61.275238,55.002951,59.546337,57.75259,52.901981,56.44516,62.369649,59.401159,50.242971,65.982738,57.30896,54.196863,55.237565,50.99988,56.468951,55.874551,55.83079,57.555756,57.04939,59.04326,58.237737,58.101557,59.828507,52.256543,57.989157,57.247239,57.109207,59.703558,59.367244,51.793747,51.858999,60.090563,63.143239,57.996808,56.735262,57.551452,62.230146,59.688487,58.224069,61.669734,57.124317,55.135609,55.932709,59.291118,60.313303,62.628155,57.70686,58.015369,54.213759,55.221188,60.041587,56.050763,57.069653,60.854988,55.707008,51.31443,56.808157,55.448102,56.359353,57.944326,59.056831,58.314735,59.565411,58.359741,53.159354,57.318516,60.037487,56.931283,58.949227,51.875753,57.016905,61.199137,59.585407,55.820464,58.947144,59.398939,56.875877,54.799766,54.294702,61.004944,57.933543,56.856778,63.599114,55.170003,59.455954,54.346277,58.159847,59.491646,59.982404,57.370597,59.253237,61.723023,55.363843,62.328102,58.577854,61.113395,57.546259,55.611693,60.211384,54.592503,53.872791,60.540836,58.730512,60.947419,61.111929,56.151144,51.923852,61.876634,60.329592,56.099174,61.026895,64.039952,56.373009,58.414102,51.297113,59.7401,55.152012,55.644867,58.143849,53.87105,55.16795,57.569803,57.196396,62.837731,56.338636,52.731741,61.252864,52.836186,55.424378,57.20324,51.822965,51.564666,58.369617,54.86785,57.528149,58.760544,55.96919,53.139041,59.176635,56.781209,57.607689,51.463532,57.532935,61.317507,54.019518,61.55022,59.098887,53.965502,58.19568,57.034559,55.112003,54.967431,58.947082,54.930288,56.098629,52.85766,57.194246,57.007412,63.998261,53.926902,54.721054,51.482985,59.197907,52.82006,55.447035,57.459932,58.939075,53.630122,61.424525,57.950553,55.97877,55.043602,53.931199,56.148207,54.652271,60.379187,57.076868,59.477093,54.729756,54.823887,64.803528,61.289493,60.232928,54.52241,56.634878,56.534738,63.195253,54.589299,50.248737,58.522805,62.84051,58.61391,59.007887,51.835287,54.087265,59.269616,50.653621,45.018794,52.363518,55.2697,47.412469,49.362034,57.102634,42.278278,51.217478,50.522242,50.832982,54.27114,53.079731,49.415698,53.585466,51.227988,49.822121,49.991419,52.073869,49.595457,48.066707,49.762513,47.003612,51.490074,57.551068,49.946637,54.488596,51.080797,50.431414,46.895646,55.033516,48.488224,50.980104,52.659509,47.325534,52.455743,55.261215,49.016791,52.535489,51.805038,52.173573,46.515615,51.233557,50.961654,56.277432,49.187171,50.592886,48.221135,54.62557,54.149874,45.074365,50.590353,47.346273,51.22889,53.133622,56.419226,50.277589,51.89826,49.414494,49.523987,51.816095,54.565125,50.089137,46.656774,57.451957,51.39246,51.996099,45.585607,54.031226,51.985759,51.993277,52.374433,49.333281,54.709479,48.305542,45.613634,42.828413,49.608845,54.774967,55.917071,51.509741,49.089207,52.600187,53.911667,45.420661,50.574426,53.656951,50.886926,46.198069,47.899562,48.704111,49.684874,47.965604,54.589968,47.135506,48.896503,51.134351,53.194302,52.666809,47.426596,47.986344,50.72231,48.232016,50.016689,53.489808,53.462384,48.874919,43.79039,47.700688,44.379131,49.629909,48.730789,50.824315,50.062539,50.704372,52.40819,47.514651,44.357251,48.499119,50.839969,50.761566,53.899487,43.926751,48.609202,50.431603,53.429707,48.845768,47.563653,50.585654,49.358649,50.121864,50.136107,49.483931,44.565744,53.298424,49.681943,52.953439,46.797488,56.829349,45.158432,43.295648,51.91501,46.986216,43.571548,50.936349,50.718433,50.440719,50.021194,49.708888,52.126711,47.919386,47.848884,51.228679,54.63789,51.077477,45.939229,44.856981,48.759404,49.068405,54.052969,51.287081,46.341206,54.827678,49.218832,51.164872,52.839367,50.88835,51.149302,53.380236,53.060336,42.692047,46.288677,52.792852,51.50221,52.155235,48.853063,48.211206,51.066444,47.554108,46.808998,49.952669,50.584877,58.96497,51.903202,47.232234,58.53181,46.256988,54.098257,53.715572,48.693514,46.374512,47.936424,51.86247,43.969351,50.901683,47.732541,48.949746,53.187487,51.78777,48.373537,50.203119,53.769865,47.795634,52.311962,55.289852,49.030922,49.036824,51.096668,44.725508,54.317988,50.628016,50.629607,49.580775,48.323587,52.051269,53.082502,44.51765,51.259267,53.964194,44.481301,52.394366,54.816197,47.919001,53.006979,46.871714,48.744758,57.435616,53.179928,49.391556,50.017556,49.820231,57.231001,45.835316,51.902844,50.010749,45.661273,45.956758,53.422027,51.341201,48.285305,53.16869,48.926228,53.302457,52.969668,47.326853,54.844817,47.186276,42.970526,51.290166,54.182943],"female":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"idx":[211,31,143,71,33,183,29,17,35,174,241,240,208,66,412,225,123,155,89,19,197,452,85,244,226,134,217,220,38,99,16,15,182,213,184,102,230,34,43,245,135,95,428,185,171,431,18,340,481,28],"id":["H001","H002","H003","H004","H005","H006","H007","H008","H009","H010","H011","H012","H013","H014","H015","H016","H017","H018","H019","H020","H021","H022","H023","H024","H025","H026","H027","H028","H029","H030","H031","H032","H033","H034","H035","H036","H037","H038","H039","H040","H041","H042","H043","H044","H045","H046","H047","H048","H049","H050","H051","H052","H053","H054","H055","H056","H057","H058","H059","H060","H061","H062","H063","H064","H065","H066","H067","H068","H069","H070","H071","H072","H073","H074","H075","H076","H077","H078","H079","H080","H081","H082","H083","H084","H085","H086","H087","H088","H089","H090","H091","H092","H093","H094","H095","H096","H097","H098","H099","H100","H101","H102","H103","H104","H105","H106","H107","H108","H109","H110","H111","H112","H113","H114","H115","H116","H117","H118","H119","H120","H121","H122","H123","H124","H125","H126","H127","H128","H129","H130","H131","H132","H133","H134","H135","H136","H137","H138","H139","H140","H141","H142","H143","H144","H145","H146","H147","H148","H149","H150","H151","H152","H153","H154","H155","H156","H157","H158","H159","H160","H161","H162","H163","H164","H165","H166","H167","H168","H169","H170","H171","H172","H173","H174","H175","H176","H177","H178","H179","H180","H181","H182","H183","H184","H185","H186","H187","H188","H189","H190","H191","H192","H193","H194","H195","H196","H197","H198","H199","H200","H201","H202","H203","H204","H205","H206","H207","H208","H209","H210","H211","H212","H213","H214","H215","H216","H217","H218","H219","H220","H221","H222","H223","H224","H225","H226","H227","H228","H229","H230","H231","H232","H233","H234","H235","H236","H237","H238","H239","H240","H241","H242","H243","H244","H245","H246","H247","H248","H249","H250","H251","H252","H253","H254","H255","H256","H257","H258","H259","H260","H261","H262","H263","H264","H265","H266","H267","H268","H269","H270","H271","H272","H273","H274","H275","H276","H277","H278","H279","H280","H281","H282","H283","H284","H285","H286","H287","H288","H289","H290","H291","H292","H293","H294","H295","H296","H297","H298","H299","H300","H301","H302","H303","H304","H305","H306","H307","H308","H309","H310","H311","H312","H313","H314","H315","H316","H317","H318","H319","H320","H321","H322","H323","H324","H325","H326","H327","H328","H329","H330","H331","H332","H333","H334","H335","H336","H337","H338","H339","H340","H341","H342","H343","H344","H345","H346","H347","H348","H349","H350","H351","H352","H353","H354","H355","H356","H357","H358","H359","H360","H361","H362","H363","H364","H365","H366","H367","H368","H369","H370","H371","H372","H373","H374","H375","H376","H377","H378","H379","H380","H381","H382","H383","H384","H385","H386","H387","H388","H389","H390","H391","H392","H393","H394","H395","H396","H397","H398","H399","H400","H401","H402","H403","H404","H405","H406","H407","H408","H409","H410","H411","H412","H413","H414","H415","H416","H417","H418","H419","H420","H421","H422","H423","H424","H425","H426","H427","H428","H429","H430","H431","H432","H433","H434","H435","H436","H437","H438","H439","H440","H441","H442","H443","H444","H445","H446","H447","H448","H449","H450","H451","H452","H453","H454","H455","H456","H457","H458","H459","H460","H461","H462","H463","H464","H465","H466","H467","H468","H469","H470","H471","H472","H473","H474","H475","H476","H477","H478","H479","H480","H481","H482","H483","H484","H485","H486","H487","H488","H489","H490","H491","H492","H493","H494","H495","H496","H497","H498","H499","H500"]},"lego":{"x":[40,37,52,483,802,16,376,1154,125,94,361,642,487,20,574,99,204,41,28,21,480,36,35,64,511,685,593,409,778,32,980,43,30,28,182,336,125,110,605,491,223,49,47,832,50,30,51,0,985,2040,1311,778,431,224,60,120,896,444,58,29,40,241,237,21,56,1211,388,113,47,41],"name":["Stephanie's Jungle Play Cube","Autumn's Waffle Stand","Beach Cleanup","Music Store & Apartment","Andrea's Family House","Paisley and Seesaw with Bunny","Sea Rescue Center","Andrea's Theater School","Dog Rescue Bike","Mobile Fashion Boutique","Baking Competition","Roller Disco Arcade","Forest Camper Van and Sailboat","Kitten at the Vet","Heartlake City Airplane","Unicorn & Flamingo Pool Party","Liann's Room","Olivia's Flamingo Cube","Puppy's Stage","Puppy","Heartlake City Bus","Friends Heart Box","Cake Decorating Set","Flower Garden","Forest Horseback Riding Center","Surfer Beachfront","Pet Day-Care Center","Vintage Fashion Store","Friendship Camper Van Adventure","Surfing with Dolphin","Holiday Ski Slope and Caf\u00e9","Andrea's Summer Play Cube","Olivia's Snack Stand","Sea Lion","River Camping Adventure","Heartlake City Brick Box","Mobile Bakery Food Cart","Cotton Candy Stand and Scooter","Heartlake City School","Igloo Holiday Adventure","Magical Acrobatics","Andrea's Play Cube","Andrea's Jungle Play Cube","Sports Centre","Emma's Jungle Play Cube","Cake Kitchen","Emma's Summer Play Cube","Explore Outdoors Gift Set","Heartlake International School","Heartlake City Apartments and Stores","Castle Bed and Breakfast","Friendship Bus","Skate Park","Heartlake City Park Caf\u00e9","Ice Cream Truck","Pet Clinic","Restaurant and Cooking School","Beach House","Emma's Fashion Cube","Petshop","Mia's Play Cube","Nature Glamping","Friends Advent Calendar 2025","Bunny at Veterinary Station","Mia's Soccer Cube","10 Years Of Friendship","Heartlake City Hospital","Surfing Dogs and Scooter Adventure","Olivia's Shopping Play Cube","Emma's Dalmatian Cube"],"year":[2020,2025,2023,2025,2021,2025,2023,2022,2023,2022,2020,2022,2021,2024,2020,2025,2023,2021,2025,2025,2023,2023,2020,2024,2021,2021,2022,2024,2025,2023,2023,2020,2020,2020,2024,2020,2024,2025,2021,2023,2021,2020,2020,2023,2020,2023,2020,2025,2023,2025,2024,2020,2023,2020,2020,2022,2025,2020,2021,2025,2020,2020,2025,2023,2021,2022,2020,2025,2020,2021],"pop":[75,44,55,67,54,57,46,84,52,56,64,37,51,1211,182,97,240,235,241,361,388,778,57,103,170,49,44,40,40,36,40,44,47,37,49,43,47,48,50,51,236,203,265,302,657,92,224,343,444,574,1012,336,512,640,47,40,51,43,50,60,99,148,100,183,314,313,267,432,451,802,1032,41,41,40,46,45,64,58,56,60,59,93,326,487,605,511,1309,974,223,361,348,545,370,221,249,685,54,120,60,90,210,292,391,593,737,1114,1682,144,312,336,642,686,299,844,259,757,1154,84,305,439,593,94,373,826,1004,63,185,61,87,617,346,830,853,985,2010,109,717,785,376,1348,125,204,209,300,445,401,832,545,149,696,1513,446,431,203,157,203,179,980,1072,231,480,491,167,514,364,1237,981,125,79,129,170,196,87,344,409,400,670,489,426,845,1126,1045,157,84,437,213,628,825,1128,170,100,105,60,239,272,1311,2275,86,113,154,110,92,125,222,199,243,376,375,437,701,483,742,896,958,99,220,262,347,778,686,66,321,237,1161,2040,1138,192,1140,1005,8,36,0,35,30,32,29,36,30,21,28,30,29,32,21,19,32,25,44,29,35,27,24,21,35,28,40,24,21,25,32,38,30,42,24,20,21,32,28,37,33,21,24,21,16,29,21,28,29,0,0,0,0,0,0,60,36]}}</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const RAW = JSON.parse($('boot-data').textContent);
+
+/* ---------- random numbers ---------- */
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rpois(lam, r) { const L = Math.exp(-lam); let k = 0, p = r(); while (p > L) { k++; p *= r(); } return k; }
+const rchisq2 = r => -2 * Math.log(1 - r());
+const rnd = Math.random;
+
+/* ---------- statistics ---------- */
+function meanOf(a, n = a.length) { let s = 0; for (let i = 0; i < n; i++) s += a[i]; return s / n; }
+function varOf(a, n = a.length) { const m = meanOf(a, n); let s = 0; for (let i = 0; i < n; i++) s += (a[i] - m) ** 2; return n > 1 ? s / (n - 1) : 0; }
+function medianOf(a, n = a.length) { const b = Float64Array.from(a.length === n ? a : a.subarray(0, n)).sort(); return n % 2 ? b[(n - 1) >> 1] : (b[n / 2 - 1] + b[n / 2]) / 2; }
+function ipwOf(a, sw, n = a.length) { let num = 0, den = 0; for (let i = 0; i < n; i++) { const w = 1 / sw[i]; num += w * a[i]; den += w; } return num / den; }
+function statOf(id, a, sw, n = a.length) {
+  switch (id) {
+    case 'mean': return meanOf(a, n);
+    case 'median': return medianOf(a, n);
+    case 'sd': return Math.sqrt(varOf(a, n));
+    case 'var': return varOf(a, n);
+    case 'ipw': return ipwOf(a, sw, n);
+  }
+}
+function quantileSorted(s, p) { // R's default (type 7)
+  const n = s.length; if (!n) return NaN;
+  const h = (n - 1) * p, lo = Math.floor(h), hi = Math.min(n - 1, lo + 1);
+  return s[lo] + (h - lo) * (s[hi] - s[lo]);
+}
+const STATS = {
+  mean:   {label: 'Mean',     name: 'sample mean',     loc: true,  r: 'mean'},
+  median: {label: 'Median',   name: 'sample median',   loc: true,  r: 'median'},
+  sd:     {label: 'SD',       name: 'sample SD',       loc: false, r: 'sd'},
+  var:    {label: 'Variance', name: 'sample variance', loc: false, r: 'var'},
+  ipw:    {label: 'IPW mean', name: 'IPW mean',        loc: true,  r: 'ipw_mean'},
+};
+
+/* ---------- populations ---------- */
+function bwNrd0(v) {
+  const s = Float64Array.from(v).sort(), sd = Math.sqrt(varOf(s)), iqr = (quantileSorted(s, .75) - quantileSorted(s, .25)) / 1.34;
+  return 0.9 * Math.min(sd, iqr > 0 ? iqr : sd) * s.length ** -0.2;
+}
+// Gaussian KDE tabulated on a grid (linear interpolation afterwards); reflect = boundary correction at 0.
+function kdeTable(vals, x0, x1, reflect) {
+  const bw = bwNrd0(vals), G = 600, xs = new Float64Array(G), ys = new Float64Array(G), c = 1 / (vals.length * bw * Math.sqrt(2 * Math.PI));
+  for (let g = 0; g < G; g++) {
+    const x = x0 + (x1 - x0) * g / (G - 1); let s = 0;
+    if (!(reflect && x < 0)) for (const v of vals) { const z = (x - v) / bw; s += Math.exp(-0.5 * z * z); if (reflect) { const z2 = (x + v) / bw; s += Math.exp(-0.5 * z2 * z2); } }
+    xs[g] = x; ys[g] = s * c;
+  }
+  const f = x => { if (x <= x0 || x >= x1) return 0; const t = (x - x0) / (x1 - x0) * (G - 1), i = Math.floor(t); return ys[i] + (t - i) * (ys[i + 1] - ys[i]); };
+  let mx = 0; for (const y of ys) mx = Math.max(mx, y);
+  return {f, max: mx};
+}
+function finiteTheta(P) {
+  const s = Float64Array.from(P);
+  return {mean: meanOf(s), median: medianOf(s), sd: Math.sqrt(varOf(s)), var: varOf(s), ipw: meanOf(s)};
+}
+
+const HAWK = {pop: Float64Array.from(RAW.hawks.pop), fem: Uint8Array.from(RAW.hawks.female), id: RAW.hawks.id};
+HAWK.F = []; HAWK.M = [];
+HAWK.fem.forEach((f, i) => (f ? HAWK.F : HAWK.M).push(i));
+const LEGO_POP = Float64Array.from(RAW.lego.pop);
+const lgamma1 = k => { let s = 0; for (let j = 2; j <= k; j++) s += Math.log(j); return s; };
+
+const POPS = {
+  pois: {
+    kind: 'pmf', p: k => Math.exp(-3 + k * Math.log(3) - lgamma1(k)), kmax: 12, maxP: Math.exp(-3) * 4.5,
+    theta: {mean: 3, median: 3, sd: Math.sqrt(3), var: 3},
+    draw(n, r) { const x = new Float64Array(n); for (let i = 0; i < n; i++) x[i] = rpois(3, r); return {x}; },
+    finite: false, label: 'population: Poisson(3)',
+  },
+  chisq: {
+    kind: 'pdf', f: x => x < 0 ? 0 : 0.5 * Math.exp(-x / 2), maxF: 0.5,
+    theta: {mean: 2, median: 2 * Math.LN2, sd: 2, var: 4},
+    draw(n, r) { const x = new Float64Array(n); for (let i = 0; i < n; i++) x[i] = rchisq2(r); return {x}; },
+    finite: false, label: 'population: χ²(2)',
+  },
+  hawks: {
+    kind: 'pdf', theta: finiteTheta(HAWK.pop), finite: true, label: '500 hawks',
+    // Sequential weighted sampling without replacement (what slice_sample(weight_by =) does): each draw picks a female with
+    // probability 9F/(9F + M) given F females and M males left, then a uniformly random remaining bird of that sex.
+    draw(n, r) {
+      const F = HAWK.F.slice(), M = HAWK.M.slice(); let nf = F.length, nm = M.length;
+      const idx = new Int32Array(n);
+      for (let k = 0; k < n; k++) {
+        const pickF = r() * (9 * nf + nm) < 9 * nf;
+        const arr = pickF ? F : M, len = pickF ? nf : nm, j = Math.floor(r() * len);
+        idx[k] = arr[j]; arr[j] = arr[len - 1]; arr[len - 1] = idx[k];
+        if (pickF) nf--; else nm--;
+      }
+      return hawkSample(idx);
+    },
+  },
+  lego: {
+    kind: 'pdf', theta: finiteTheta(LEGO_POP), finite: true, label: 'all 286 Friends sets',
+    perm: Int32Array.from(LEGO_POP, (_, i) => i),
+    draw(n, r) { // simple random sample without replacement (partial Fisher-Yates)
+      const p = this.perm, N = p.length, x = new Float64Array(n);
+      for (let k = 0; k < n; k++) { const j = k + Math.floor(r() * (N - k)); const t = p[k]; p[k] = p[j]; p[j] = t; x[k] = LEGO_POP[p[k]]; }
+      return {x};
+    },
+  },
+};
+function hawkSample(idx) {
+  const n = idx.length, x = new Float64Array(n), sw = new Float64Array(n), fem = new Uint8Array(n), ids = [];
+  for (let k = 0; k < n; k++) { const i = idx[k]; x[k] = HAWK.pop[i]; fem[k] = HAWK.fem[i]; sw[k] = fem[k] ? 9 : 1; ids.push(HAWK.id[i]); }
+  return {x, sw, fem, ids};
+}
+
+/* ---------- datasets ---------- */
+const DATASETS = [
+  {id: 'pois50', label: 'Poisson(3) sample, n = 50', pop: 'pois', stat: 'mean', integer: true, xlab: 'y', unit: '',
+   lecture: () => ({x: Float64Array.from(RAW.pois50.x)}),
+   note: 'The first example in the slides: <code>set.seed(1); rpois(50, lambda = 3)</code>. The population is Poisson with mean 3, so here we can check the bootstrap against the truth.',
+   rData: 'set.seed(1)\nmy_sample <- rpois(50, lambda = 3)', rNew: 'my_sample <- rpois(50, lambda = 3)', rv: 'my_sample',
+   slides: {mean: {se: '0.223', note: 'formula SE 0.226, true SE 0.245'}}},
+  {id: 'whelk', label: 'Whelk shell weights, n = 14', pop: null, stat: 'mean', integer: true, xlab: 'shell weight', unit: '',
+   lecture: () => ({x: Float64Array.from(RAW.whelk.x)}),
+   note: 'Shells from the campus beach. Nobody knows the population of whelk shells, so there is nothing to check against: the 14 shells are all we have. With n this small you can follow every draw.',
+   rData: 'whelk_weights <- c(22, 32, 88, 60, 44, 35, 12,\n                   14, 23, 33, 19, 139, 125, 90)', rv: 'whelk_weights'},
+  {id: 'pois500', label: 'Poisson(3) sample, n = 500', pop: 'pois', stat: 'mean', integer: true, xlab: 'y', unit: '',
+   lecture: () => ({x: Float64Array.from(RAW.pois500.x)}),
+   note: '<code>set.seed(4); rpois(500, lambda = 3)</code>. Ten times as much data, so the bootstrap distribution is about √10 ≈ 3.2 times narrower than with n = 50.',
+   rData: 'set.seed(4)\nmy_sample <- rpois(500, lambda = 3)', rNew: 'my_sample <- rpois(500, lambda = 3)', rv: 'my_sample',
+   slides: {mean: {se: '0.0786'}}},
+  {id: 'chisq8', label: 'χ²(2) sample, n = 200 (median slides)', pop: 'chisq', stat: 'median', integer: false, xlab: 'y', unit: '',
+   lecture: () => ({x: Float64Array.from(RAW.chisq8.x)}),
+   note: '<code>set.seed(8); rchisq(200, df = 2)</code>. A bootstrap median can only land on a few values near the middle of our sample, so its bootstrap distribution is lumpy, while the true sampling distribution is smooth.',
+   rData: 'set.seed(8)\nmy_sample <- rchisq(200, df = 2)', rNew: 'my_sample <- rchisq(200, df = 2)', rv: 'my_sample',
+   slides: {median: {se: '0.152', ci: '[1.300, 1.942]', note: 'simulated SE 0.142'}}},
+  {id: 'chisq1', label: 'χ²(2) sample, n = 200 (mean & variance slides)', pop: 'chisq', stat: 'var', integer: false, xlab: 'y', unit: '',
+   lecture: () => ({x: Float64Array.from(RAW.chisq1.x)}),
+   note: '<code>set.seed(1); rchisq(200, df = 2)</code>, used for the slides that bootstrap the mean and the variance. The variance is shown on the data axis as a mean ± SD bracket.',
+   rData: 'set.seed(1)\nmy_sample <- rchisq(200, df = 2)', rNew: 'my_sample <- rchisq(200, df = 2)', rv: 'my_sample'},
+  {id: 'hawks', label: 'Hawks: biased sample of 50', pop: 'hawks', stat: 'ipw', integer: false, xlab: 'length (cm)', unit: ' cm',
+   lecture: () => hawkSample(Int32Array.from(RAW.hawks.idx)),
+   note: 'The 500 simulated hawks from the sampling lecture. Females were 9 times as likely to be sampled, so 44 of our 50 are female. Each draw takes a <b>whole hawk</b>, sex and weight included. Compare the mean (biased) with the IPW mean.',
+   rv: 'samp', slides: {ipw: {se: '1.07', ci: '[51.98, 56.13]', note: 'simulated SE 1.13'}, mean: {se: '0.505', ci: '[55.34, 57.29]', note: 'simulated SE 0.501'}}},
+  {id: 'lego', label: 'Lego Friends part counts, n = 70', pop: 'lego', stat: 'sd', integer: true, xlab: 'number of parts', unit: ' parts',
+   lecture: () => ({x: Float64Array.from(RAW.lego.x), names: RAW.lego.name, years: RAW.lego.year}),
+   note: 'The 70 Friends sets in <code>lego_sample.csv</code> are a subset of the 286 Friends sets in <code>lego_full.csv</code>, which plays the population here. New samples take 70 of the 286 without replacement.',
+   rv: 'one_theme_num_parts', slides: {sd: {se: '56.8'}}},
+];
+const DS = Object.fromEntries(DATASETS.map(d => [d.id, d]));
+
+/* ---------- state ---------- */
+const st = {
+  ds: DATASETS[0], stat: 'mean', sample: null, sampleNo: 0, thetaHats: [],
+  showPop: true, showTruth: false, align: false, showCI: true,
+  speed: 33, mode: 'idle', budget: 0, last: 0,
+  boots: [], sorted: null, sum: 0, sumsq: 0, leftSum: 0, leftN: 0, dirty: true,
+  flights: [], pulses: [], hover: null, alignT: 0, yMax: 5, lastV: NaN,
+};
+let cur = null;           // the bootstrap sample being drawn
+let DX = null;            // data-axis range
+let DL = null;            // dot layout
+let H = null;             // histogram bins
+let G = null;             // canvas geometry
+let vals, sws, mark;      // scratch buffers
+const truthCache = {};
+
+const pop = () => st.ds.pop ? POPS[st.ds.pop] : null;
+const nObs = () => st.sample.x.length;
+const rate = () => 10 ** (-0.2 + st.speed / 100 * 3.9);
+function thetaHat() { const S = st.sample; return statOf(st.stat, S.x, S.sw); }
+function thetaTrue() { const P = pop(); return P ? P.theta[st.stat] : NaN; }
+
+/* ---------- formatting ---------- */
+let DEC = 2;
+function fmt(v, d = DEC) {
+  if (!isFinite(v)) return '—';
+  if (Math.abs(v) < 0.5 * 10 ** -d) v = 0;
+  return (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+}
+const pct = v => (100 * v).toFixed(1) + '%';
+const intf = v => v.toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw)), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+function tickFmt(v, step) { const d = Math.max(0, -Math.floor(Math.log10(step) + 1e-9)); return Math.abs(v) < step * 1e-6 ? '0' : v.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d}).replace('-', '−'); }
+
+/* ---------- theme ---------- */
+const C = {};
+function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgba(h, a) { const [r, g, b] = hexRGB(h); return `rgba(${r},${g},${b},${a})`; }
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['surface', 'ink', 'ink-2', 'muted', 'line', 'grid', 'axis', 'pt', 'pop', 'pop-ink', 'boot']) C[k] = cs.getPropertyValue('--' + k).trim();
+}
+const FONT = {
+  tick: '10.5px "IBM Plex Mono", ui-monospace, monospace',
+  eyebrow: '500 10.5px "IBM Plex Mono", ui-monospace, monospace',
+  info: '12px "IBM Plex Sans", system-ui, sans-serif',
+  small: '11px "IBM Plex Sans", system-ui, sans-serif',
+  smallI: 'italic 11.5px "IBM Plex Sans", system-ui, sans-serif',
+  label: '500 11.5px "IBM Plex Mono", ui-monospace, monospace',
+  math: 'italic 600 15px "STIX Two Text", "Times New Roman", serif',
+};
+
+/* ---------- canvas helpers ---------- */
+const cv = $('cv');
+function setup() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(r.width * dpr)), Hh = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== W || cv.height !== Hh) { cv.width = W; cv.height = Hh; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  return ctx;
+}
+function halo(ctx, t, x, y, color, font, align = 'left', base = 'alphabetic') {
+  ctx.font = font; ctx.textAlign = align; ctx.textBaseline = base;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = C.surface; ctx.strokeText(t, x, y);
+  ctx.fillStyle = color; ctx.fillText(t, x, y);
+}
+// Math label like "θ̂ = 3.12": symbol in STIX italic, value in Plex Mono.
+const symFont = sym => /^[θ]/.test(sym) ? FONT.math : FONT.label;
+const symBase = sym => sym.startsWith('θ\u0302') ? 'θ' + sym.slice(2) : sym;
+function mathLabel(ctx, sym, val, x, y, color, align) {
+  const base = symBase(sym), f1 = symFont(sym);
+  ctx.font = f1; const w1 = ctx.measureText(base).width;
+  const rest = val == null ? '' : ' = ' + val;
+  ctx.font = FONT.label; const w2 = ctx.measureText(rest).width, W = w1 + w2;
+  const x0 = align === 'right' ? x - W : align === 'center' ? x - W / 2 : x;
+  halo(ctx, base, x0, y, color, f1, 'left');
+  if (base !== sym) { // circumflex over theta, drawn by hand (fonts place the combining accent badly)
+    ctx.font = FONT.math; const cx = x0 + ctx.measureText('θ').width * 0.62, ty = y - 14.5;
+    const hat = () => { ctx.beginPath(); ctx.moveTo(cx - 3.1, ty + 3); ctx.lineTo(cx, ty); ctx.lineTo(cx + 3.1, ty + 3); ctx.stroke(); };
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = C.surface; ctx.lineWidth = 3.5; hat(); ctx.strokeStyle = color; ctx.lineWidth = 1.4; hat();
+  }
+  if (rest) halo(ctx, rest, x0 + w1, y, color, FONT.label, 'left');
+  return {x0, x1: x0 + W};
+}
+function measureMath(ctx, sym, val) {
+  ctx.font = symFont(sym); const w1 = ctx.measureText(symBase(sym)).width;
+  ctx.font = FONT.label; return w1 + (val == null ? 0 : ctx.measureText(' = ' + val).width);
+}
+// Place labels in rows under yTop so that none overlap; items: {x, sym, val, color, side}.
+function placeLabels(ctx, items, yTop, xmin, xmax) {
+  const placed = [];
+  for (const it of items) {
+    const W = measureMath(ctx, it.sym, it.val);
+    let x0 = it.side === 'left' ? it.x - 5 - W : it.side === 'center' ? it.x - W / 2 : it.x + 5;
+    if (x0 + W > xmax) x0 = it.x - 5 - W;
+    if (x0 < xmin) x0 = Math.min(it.x + 5, xmax - W);
+    let row = 0;
+    while (placed.some(p => p.row === row && !(x0 + W + 6 < p.x0 || x0 - 6 > p.x1))) row++;
+    placed.push({x0, x1: x0 + W, row});
+    mathLabel(ctx, it.sym, it.val, x0, yTop + 12 + row * 15, it.color, 'left');
+  }
+}
+function dot(ctx, x, y, r, fill, ring, lw = 1.6) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (ring) { ctx.strokeStyle = ring; ctx.lineWidth = lw; ctx.stroke(); }
+}
+const easeIO = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* ---------- geometry ---------- */
+function geometry() {
+  const w = cv.getBoundingClientRect().width;
+  const compact = document.body.classList.contains('compact');
+  let h = compact ? clamp(window.innerHeight - 92, 470, 690) : clamp(Math.round(w * 0.72), 560, 690);
+  if (Math.abs(parseFloat(cv.style.height || 0) - h) > 0.5) cv.style.height = h + 'px';
+  const g = {w, h, padL: 46, padR: 14};
+  const fixed = 6 + 20 + 14 + 20 + 22 + 26 + 20 + 22;
+  const rest = h - fixed;
+  let y = 6;
+  g.aT = y; y += 20; g.aTop = y; g.aH = Math.round(rest * 0.35); y += g.aH; g.aBase = y;
+  y += 14; g.bT = y; y += 20; g.bTop = y; g.bH = Math.round(rest * 0.28); y += g.bH; g.bBase = y;
+  y += 22 + 26; g.cT = y; y += 20; g.cTop = y; g.cH = rest - g.aH - g.bH; y += g.cH; g.cBase = y;
+  g.x0 = g.padL; g.x1 = w - g.padR; g.pw = g.x1 - g.x0;
+  g.Xd = v => g.x0 + (v - DX[0]) / (DX[1] - DX[0]) * g.pw;
+  g.Xdi = px => DX[0] + (px - g.x0) / g.pw * (DX[1] - DX[0]);
+  g.Xs = v => g.x0 + (v - H.lo) / (H.hi - H.lo) * g.pw;
+  G = g;
+}
+function dataRange() {
+  const x = st.sample.x; let mn = Infinity, mx = -Infinity;
+  for (const v of x) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+  switch (st.ds.pop) {
+    case 'pois': return [-0.7, Math.max(10, mx) + 0.7];
+    case 'chisq': return [-0.3, Math.max(12.5, mx * 1.02)];
+    case 'hawks': { let a = Infinity, b = -Infinity; for (const v of HAWK.pop) { a = Math.min(a, v); b = Math.max(b, v); } return [Math.floor(Math.min(a, mn)) - 1, Math.ceil(Math.max(b, mx)) + 1]; }
+    case 'lego': { let b = 0; for (const v of LEGO_POP) b = Math.max(b, v); return [-40, Math.max(b, mx) * 1.03]; }
+    default: return [0, Math.max(150, mx * 1.06)];
+  }
+}
+let POPCURVE = null;
+function popCurve() {
+  const P = pop(); if (!P) return null;
+  if (P.kind === 'pmf') return {pmf: P.p, maxP: P.maxP, kmax: P.kmax};
+  if (st.ds.pop === 'chisq') return {f: P.f, maxF: P.maxF};
+  if (!P.kde) P.kde = st.ds.pop === 'hawks' ? kdeTable(HAWK.pop, DX[0], DX[1], false) : kdeTable(LEGO_POP, DX[0], DX[1], true);
+  return {f: P.kde.f, maxF: P.kde.max};
+}
+
+/* ---------- dot layout (Wilkinson dot plot; integer data on a short range stack in blocks) ---------- */
+function layoutDots() {
+  const g = G, S = st.sample, n = S.x.length, PC = POPCURVE;
+  const ppu = g.pw / (DX[1] - DX[0]);
+  const discrete = st.ds.integer && DX[1] - DX[0] <= 40;
+  const cap = Math.min(g.aH * 0.76, g.bH * 0.8);
+  const rmax = n <= 20 ? 7.5 : n <= 60 ? 6 : n <= 120 ? 4.5 : 3.5;
+  let L = null;
+  for (let r = rmax; ; r -= 0.25) {
+    const gap = r < 2 ? 0.35 : 0.9, d = 2 * r + gap;
+    const cols = discrete ? Math.max(1, Math.floor(0.86 * ppu / d)) : 1;
+    const keyOf = discrete ? v => Math.round(v) : v => Math.floor((g.Xd(v) - g.x0) / d);
+    const cnt = new Map(); let maxRows = 0;
+    for (const v of S.x) { const k = keyOf(v), c = (cnt.get(k) || 0) + 1; cnt.set(k, c); maxRows = Math.max(maxRows, Math.ceil(c / cols)); }
+    let expRows = 0;
+    if (PC && st.showPop) expRows = PC.pmf ? n * PC.maxP / cols : n * PC.maxF * d / ppu;
+    if (Math.max(maxRows, expRows) * d <= cap || r <= 0.75) { L = {r, d, cols, discrete, keyOf, ppu}; break; }
+  }
+  // compact bin index per key, x position of each bin
+  const keys = [...new Set(Array.from(S.x, L.keyOf))].sort((a, b) => a - b);
+  const kIdx = new Map(keys.map((k, j) => [k, j]));
+  L.binX = Float64Array.from(keys, k => L.discrete ? g.Xd(k) : g.x0 + (k + 0.5) * L.d);
+  L.binOf = Int32Array.from(S.x, v => kIdx.get(L.keyOf(v)));
+  L.nb = keys.length;
+  // sample positions: sorted by value inside each bin
+  const order = [...Array(n).keys()].sort((a, b) => S.x[a] - S.x[b] || a - b);
+  const fill = new Int32Array(L.nb);
+  L.ax = new Float64Array(n); L.ay = new Float64Array(n);
+  for (const i of order) { const b = L.binOf[i], s = fill[b]++; const p = slotXY(L, b, s, L.d, g.aBase); L.ax[i] = p[0]; L.ay[i] = p[1]; }
+  DL = L;
+}
+function slotXY(L, b, s, step, base) {
+  const col = s % L.cols, row = Math.floor(s / L.cols);
+  return [L.binX[b] + (col - (L.cols - 1) / 2) * L.d, base - (row + 0.5) * step];
+}
+
+/* ---------- histogram of bootstrap estimates ---------- */
+function truth() {
+  const P = pop(); if (!P) return null;
+  const key = st.ds.id + ':' + st.stat;
+  if (truthCache[key]) return truthCache[key];
+  const r = mulberry32(hashStr(key)), M = P.finite ? 3000 : 4000, n = st.ds.lecture().x.length;
+  const out = new Float64Array(M);
+  for (let m = 0; m < M; m++) { const S = P.draw(n, r); out[m] = statOf(st.stat, S.x, S.sw); }
+  const s = Float64Array.from(out).sort();
+  return (truthCache[key] = {vals: out, sorted: s, se: Math.sqrt(varOf(out)), M, lo: quantileSorted(s, 0.002), hi: quantileSorted(s, 0.998)});
+}
+function pilotSE() {
+  const S = st.sample, n = S.x.length, r = mulberry32(777), P = 400, out = new Float64Array(P);
+  for (let p = 0; p < P; p++) { for (let j = 0; j < n; j++) { const i = Math.floor(r() * n); vals[j] = S.x[i]; if (S.sw) sws[j] = S.sw[i]; } out[p] = statOf(st.stat, vals, sws, n); }
+  const s = out.sort();
+  return {se: Math.sqrt(varOf(out)), lo: s[0], hi: s[P - 1]};
+}
+function setupHist() {
+  const th = thetaHat(), pil = pilotSE(), T = truth();
+  let se = pil.se;
+  if (!(se > 0)) se = Math.max(Math.abs(th) * 0.02, 0.05);
+  let lo = Math.min(th - 4.3 * se, pil.lo), hi = Math.max(th + 4.3 * se, pil.hi);
+  if (T) { lo = Math.min(lo, T.lo, thetaTrue()); hi = Math.max(hi, T.hi, thetaTrue()); }
+  const pad = (hi - lo) * 0.04; lo -= pad; hi += pad;
+  if (!STATS[st.stat].loc) lo = Math.max(lo, 0);
+  // integer data put the mean on a 1/n grid and the median on a 1/2 grid: centre bins on grid points to avoid aliasing
+  const n = nObs(), target = clamp(Math.round(G.pw / 15), 24, 60);
+  let bw = (hi - lo) / target, lattice = 0;
+  if (st.ds.integer && st.stat === 'mean') lattice = 1 / n;
+  if (st.ds.integer && st.stat === 'median') lattice = n % 2 ? 1 : 0.5;
+  if (lattice) { bw = lattice * Math.max(1, Math.round(bw / lattice)); lo = lattice * (Math.floor(lo / lattice) - 0.5); }
+  const nb = Math.max(1, Math.ceil((hi - lo) / bw)); hi = lo + nb * bw;
+  H = {lo, hi, bw, nb, counts: new Int32Array(nb), tp: null};
+  if (T) { H.tp = new Float64Array(nb); for (const v of T.vals) H.tp[binOfV(v)] += 1 / T.M; }
+  for (const v of st.boots) H.counts[binOfV(v)]++;
+  const sc = Math.max(se, T ? T.se : 0);
+  DEC = clamp(2 - Math.floor(Math.log10(sc)), 0, 5);
+  st.yMax = 5;
+}
+const binOfV = v => clamp(Math.floor((v - H.lo) / H.bw), 0, H.nb - 1);
+
+/* ---------- bootstrap engine ---------- */
+function newCur() {
+  const n = nObs();
+  cur = {draws: [], cnt: new Int32Array(n), fill: new Int32Array(DL.nb), k: 0, done: false, value: NaN, left: 0, nextAt: 0, showAt: 0, fem: 0, no: st.boots.length + st.flights.length + 1};
+}
+function resetBoot() {
+  st.boots = []; st.sorted = null; st.sum = st.sumsq = st.leftSum = st.leftN = 0; st.flights = []; st.pulses = []; st.lastV = NaN;
+  st.budget = 0; st.dirty = true; st.yMax = 5;
+  if (H) H.counts.fill(0);
+  newCur();
+}
+function addBoot(v, left) {
+  st.boots.push(v); st.sum += v; st.sumsq += v * v; st.leftSum += left / nObs(); st.leftN++;
+  H.counts[binOfV(v)]++; st.lastV = v; st.dirty = true;
+}
+function doDraw(now, fall, opts = {}) {
+  const n = nObs(), i = Math.floor(rnd() * n), b = DL.binOf[i];
+  cur.cnt[i]++; const slot = cur.fill[b]++;
+  cur.draws.push({i, b, slot, t0: now, dur: fall});
+  if (st.sample.fem && st.sample.fem[i]) cur.fem++;
+  cur.k++;
+  if (opts.pulse !== false && fall > 0) { st.pulses.push({i, t0: now}); if (st.pulses.length > 40) st.pulses.shift(); }
+  if (cur.k === n) completeCur(now, fall, opts);
+}
+function finishTimes(fall) {
+  const tSample = nObs() / rate();
+  const fly = reduceMotion ? 0 : tSample > 1.5 ? 700 : tSample > 0.3 ? 420 : 0;
+  const pause = tSample > 1.5 ? 650 : tSample > 0.3 ? 160 : 0;
+  return {fly, pause};
+}
+function completeCur(now, fall, opts = {}) {
+  const n = nObs(), S = st.sample;
+  for (let j = 0; j < n; j++) { const i = cur.draws[j].i; vals[j] = S.x[i]; if (S.sw) sws[j] = S.sw[i]; }
+  cur.value = statOf(st.stat, vals, sws, n);
+  cur.mean = meanOf(vals, n); cur.sdv = Math.sqrt(varOf(vals, n));
+  let left = 0; for (let i = 0; i < n; i++) if (!cur.cnt[i]) left++;
+  cur.left = left; cur.done = true; cur.showAt = now + fall;
+  const {fly, pause} = opts.manual ? {fly: reduceMotion ? 0 : 700, pause: 0} : finishTimes(fall);
+  if (opts.instant || fly === 0) { addBoot(cur.value, left); cur.nextAt = now + fall + pause; }
+  else { st.flights.push({v: cur.value, left, from: cur.no, t0: now + fall, dur: fly, cur}); cur.nextAt = now + fall + fly + pause; }
+}
+function landFlights(now, all = false) {
+  if (!st.flights.length) return;
+  const keep = [];
+  for (const f of st.flights) { if (all || now >= f.t0 + f.dur) addBoot(f.v, f.left); else keep.push(f); }
+  st.flights = keep;
+}
+function fastBoot() {
+  const S = st.sample, n = S.x.length; mark.fill(0);
+  for (let j = 0; j < n; j++) { const i = Math.floor(rnd() * n); vals[j] = S.x[i]; if (S.sw) sws[j] = S.sw[i]; mark[i] = 1; }
+  let used = 0; for (let i = 0; i < n; i++) used += mark[i];
+  addBoot(statOf(st.stat, vals, sws, n), n - used);
+}
+function bulk(k) {
+  const now = performance.now();
+  stopPlay(); landFlights(now, true);
+  const quick = {pulse: false, instant: true};
+  if (cur.k > 0 && !cur.done) { while (!cur.done) doDraw(now, 0, quick); k--; }
+  for (let j = 0; j < k - 1; j++) fastBoot();
+  if (k > 0) { newCur(); while (!cur.done) doDraw(now, 0, quick); }
+  st.pulses = [];
+  request();
+}
+function step(now) {
+  const dt = Math.min(100, now - (st.last || now)); st.last = now;
+  if (st.mode !== 'idle') {
+    if (!cur.done) st.budget += dt / 1000 * rate();
+    const r = rate(), fall = reduceMotion || r > 300 ? 0 : Math.min(550, 2200 / r);
+    for (let guard = 0; guard < 200000; guard++) {
+      if (cur.done) {
+        if (st.mode === 'run1') { st.mode = 'idle'; st.budget = 0; syncButtons(); break; }
+        if (now < cur.nextAt) break;
+        newCur();
+      }
+      if (st.budget < 1) break;
+      st.budget -= 1;
+      doDraw(now, fall);
+    }
+  }
+  landFlights(now);
+  const target = st.align && st.showTruth ? 1 : 0;
+  if (st.alignT !== target) st.alignT = reduceMotion ? target : clamp(st.alignT + (target > st.alignT ? 1 : -1) * dt / 450, 0, 1);
+}
+
+/* ---------- drawing ---------- */
+function drawTitle(ctx, y, left, leftColor, right) {
+  const g = G;
+  ctx.font = FONT.eyebrow; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  let x = g.x0 - 30;
+  for (const [t, c] of left) { ctx.fillStyle = c; ctx.fillText(t, x, y + 4); x += ctx.measureText(t).width; }
+  if (right) {
+    ctx.font = FONT.info; const w = ctx.measureText(right).width;
+    if (g.x1 - w > x + 16) { ctx.fillStyle = C['ink-2']; ctx.textAlign = 'right'; ctx.fillText(right, g.x1, y + 2); }
+  }
+}
+function xTicks(ctx, X, lo, hi, y, label) {
+  const g = G, step = niceStep((hi - lo) / Math.max(3, g.pw / 85));
+  ctx.font = FONT.small; const lw = label ? ctx.measureText(label).width : 0;
+  ctx.font = FONT.tick; ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) {
+    const x = X(v), t = tickFmt(v, step), tw = ctx.measureText(t).width;
+    if (x - tw / 2 < g.x0 - 20 || x + tw / 2 > g.x1 - lw - 10) continue;
+    ctx.fillText(t, x, y);
+  }
+  if (label) { ctx.font = FONT.small; ctx.fillStyle = C['ink-2']; ctx.textAlign = 'right'; ctx.fillText(label, g.x1, y); }
+  return step;
+}
+function vGrid(ctx, top, bottom, step) {
+  const g = G; ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.beginPath();
+  for (let v = Math.ceil(DX[0] / step) * step; v <= DX[1]; v += step) { const x = Math.round(g.Xd(v)) + .5; ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+  ctx.stroke();
+}
+function baseLine(ctx, y) { const g = G; ctx.strokeStyle = C.axis; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.x0, y + .5); ctx.lineTo(g.x1, y + .5); ctx.stroke(); }
+
+function drawPopulation(ctx) {
+  const g = G, PC = POPCURVE, L = DL, n = nObs(), base = g.aBase;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(g.x0, g.aTop, g.pw, g.aH); ctx.clip();
+  const fill = rgba(C.pop, 0.17), edge = rgba(C.pop, 0.75);
+  let peak = null;
+  if (PC.pmf) {
+    const bw = L.cols * L.d + 2;
+    for (let k = 0; k <= PC.kmax; k++) {
+      const hgt = n * PC.pmf(k) / L.cols * L.d, x = g.Xd(k);
+      if (hgt < 0.3) continue;
+      ctx.fillStyle = fill; ctx.fillRect(x - bw / 2, base - hgt, bw, hgt);
+      ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - bw / 2, base - hgt); ctx.lineTo(x + bw / 2, base - hgt); ctx.stroke();
+      if (!peak || hgt > peak[1]) peak = [x + bw / 2, hgt];
+    }
+  } else {
+    const sc = n * L.d * L.d / L.ppu;
+    ctx.beginPath(); ctx.moveTo(g.x0, base);
+    let mx = 0;
+    for (let px = g.x0; px <= g.x1; px += 1.5) { const y = sc * PC.f(g.Xdi(px)); ctx.lineTo(px, base - y); if (y > mx) { mx = y; peak = [px, y]; } }
+    ctx.lineTo(g.x1, base); ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    ctx.beginPath();
+    for (let px = g.x0; px <= g.x1; px += 1.5) { const y = base - sc * PC.f(g.Xdi(px)); px === g.x0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y); }
+    ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.stroke();
+    if (st.ds.pop === 'hawks') {
+      for (const [lab, set] of [['males', HAWK.M], ['females', HAWK.F]]) {
+        const m = set.reduce((s, i) => s + HAWK.pop[i], 0) / set.length, x = g.Xd(m);
+        let y = base - sc * PC.f(m);
+        for (let i = 0; i < nObs(); i++) if (Math.abs(L.ax[i] - x) < 40) y = Math.min(y, L.ay[i] - L.r);
+        halo(ctx, lab, x, y - 5, C['pop-ink'], FONT.smallI, 'center', 'bottom');
+      }
+      peak = null;
+    }
+  }
+  ctx.restore();
+  halo(ctx, pop().label, g.x1, g.aTop + 34, C['pop-ink'], FONT.smallI, 'right', 'alphabetic');
+}
+
+function sampleDot(ctx, i, x, y, r, color, alpha, lw) {
+  const S = st.sample, male = S.fem && !S.fem[i];
+  ctx.globalAlpha = alpha;
+  if (male) dot(ctx, x, y, r - 0.7, null, color, lw || 1.6); else dot(ctx, x, y, r, color);
+  ctx.globalAlpha = 1;
+}
+function statMark(ctx, band, v, mean, sdv, color, dashed, labelItems, sym, top, bottom) {
+  // location statistics: vertical line; spread statistics: a mean ± SD bracket
+  const g = G;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = dashed ? 1.6 : 2; if (dashed) ctx.setLineDash([5, 4]);
+  if (STATS[st.stat].loc) {
+    const x = g.Xd(v);
+    ctx.beginPath(); ctx.moveTo(x, bottom); ctx.lineTo(x, top + 16); ctx.stroke();
+    labelItems.push({x, sym, val: fmt(v), color});
+  } else {
+    const xa = g.Xd(mean - sdv), xb = g.Xd(mean + sdv), y = top + band;
+    ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.moveTo(xa, y - 5); ctx.lineTo(xa, y + 5); ctx.moveTo(xb, y - 5); ctx.lineTo(xb, y + 5); ctx.stroke();
+    ctx.setLineDash([]);
+    const W = measureMath(ctx, sym, fmt(v)), lx = xb + 8 + W < g.x1 ? xb + 8 : xa - 8 - W;
+    mathLabel(ctx, sym, fmt(v), Math.max(g.x0, lx), y + 4, color, 'left');
+  }
+  ctx.restore();
+}
+
+function drawA(ctx, now) {
+  const g = G, S = st.sample, n = S.x.length, L = DL, P = pop();
+  const gridStep = niceStep((DX[1] - DX[0]) / Math.max(3, g.pw / 85));
+  vGrid(ctx, g.aTop, g.aBase, gridStep); vGrid(ctx, g.bTop, g.bBase, gridStep);
+  if (P && st.showPop) drawPopulation(ctx);
+  if (!P) {
+    halo(ctx, 'Population unknown: all we have is our sample.', g.x1, g.aTop + 34, C.muted, FONT.smallI, 'right', 'alphabetic');
+  }
+  baseLine(ctx, g.aBase);
+  // our sample
+  const hov = st.hover;
+  for (let i = 0; i < n; i++) {
+    const c = cur.cnt[i], left = cur.done && c === 0;
+    const color = c > 0 ? C.boot : C.pt;
+    sampleDot(ctx, i, L.ax[i], L.ay[i], L.r, color, left ? 0.22 : 1);
+    if (c >= 2 && L.r >= 4.6) {
+      const male = S.fem && !S.fem[i];
+      ctx.font = `600 ${Math.round(L.r * 1.45)}px "IBM Plex Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = male ? C.boot : C.surface; ctx.fillText(String(c), L.ax[i], L.ay[i] + 0.5);
+    }
+  }
+  if (cur.done && cur.left) { // dashed outline marks what this bootstrap sample left out
+    ctx.save(); ctx.setLineDash([2, 2]); ctx.strokeStyle = rgba(C.pt, 0.55); ctx.lineWidth = 1;
+    for (let i = 0; i < n; i++) if (!cur.cnt[i] && L.r >= 2.5) { ctx.beginPath(); ctx.arc(L.ax[i], L.ay[i], L.r - 0.5, 0, 2 * Math.PI); ctx.stroke(); }
+    ctx.restore();
+  }
+  // pulses on the most recent draws
+  for (const p of st.pulses) {
+    const t = (now - p.t0) / 420; if (t < 0 || t > 1) continue;
+    ctx.strokeStyle = rgba(C.boot, 1 - t); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(L.ax[p.i], L.ay[p.i], L.r + 2 + 7 * t, 0, 2 * Math.PI); ctx.stroke();
+  }
+  // statistic marks
+  const items = [];
+  if (P && st.showPop) {
+    const T = P.theta;
+    statMark(ctx, 22, T[st.stat], T.mean, T.sd, C.pop, true, items, 'θ', g.aTop, g.aBase);
+  }
+  statMark(ctx, 8, thetaHat(), meanOf(S.x), Math.sqrt(varOf(S.x)), C.ink, false, items, 'θ̂', g.aTop, g.aBase);
+  items.reverse();
+  if (items.length === 2) { items[0].side = items[0].x >= items[1].x ? 'right' : 'left'; items[1].side = items[0].side === 'right' ? 'left' : 'right'; }
+  placeLabels(ctx, items, g.aTop, g.x0, g.x1);
+  // title
+  const info = `n = ${n}` + (S.fem ? ` · ${S.fem.reduce((a, b) => a + b, 0)} female, ${n - S.fem.reduce((a, b) => a + b, 0)} male` : '') + (st.sampleNo ? ` · new sample ${st.sampleNo}` : ' · the lecture’s sample');
+  drawTitle(ctx, g.aT, P && st.showPop ? [['POPULATION', C['pop-ink']], [' AND ', C.muted], ['OUR SAMPLE', C.ink]] : [['OUR SAMPLE', C.ink]], null, info);
+}
+
+function bootPos(d, now, rowStep) {
+  const L = DL, g = G;
+  const [tx, ty] = slotXY(L, d.b, d.slot, rowStep, g.bBase);
+  if (!d.dur) return [tx, ty, 1];
+  const t = clamp((now - d.t0) / d.dur, 0, 1), e = easeIO(t);
+  const sx = L.ax[d.i], sy = L.ay[d.i];
+  return [sx + (tx - sx) * e, sy + (ty - sy) * e, t];
+}
+function drawB(ctx, now) {
+  const g = G, L = DL, S = st.sample, n = S.x.length;
+  baseLine(ctx, g.bBase);
+  let maxRows = 1; for (let b = 0; b < L.nb; b++) maxRows = Math.max(maxRows, Math.ceil(cur.fill[b] / L.cols));
+  const rowStep = Math.min(L.d, (g.bH - 6) / maxRows);
+  // faint reference: our estimate
+  if (STATS[st.stat].loc) {
+    const x = g.Xd(thetaHat()); ctx.strokeStyle = rgba(C.ink, 0.28); ctx.lineWidth = 1.25; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, g.bBase); ctx.lineTo(x, g.bTop + 4); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const hov = st.hover;
+  for (const d of cur.draws) {
+    const [x, y, t] = bootPos(d, now, rowStep);
+    sampleDot(ctx, d.i, x, y, L.r, C.boot, t < 1 ? 0.9 : 1);
+  }
+  if (hov && hov.kind === 'a') { // lines from a sample point to each of its copies
+    ctx.strokeStyle = rgba(C.boot, 0.6); ctx.lineWidth = 1; ctx.beginPath();
+    for (const d of cur.draws) if (d.i === hov.i) { const [x, y] = bootPos(d, now, rowStep); ctx.moveTo(L.ax[d.i], L.ay[d.i]); ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  if (hov && hov.kind === 'b') {
+    const d = cur.draws[hov.j], [x, y] = bootPos(d, now, rowStep);
+    ctx.strokeStyle = rgba(C.boot, 0.7); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L.ax[d.i], L.ay[d.i]); ctx.lineTo(x, y); ctx.stroke();
+    dot(ctx, L.ax[d.i], L.ay[d.i], L.r + 2.5, null, C.boot, 1.5);
+  }
+  if (cur.done && now >= cur.showAt) {
+    const items = [];
+    statMark(ctx, 8, cur.value, cur.mean, cur.sdv, C.boot, false, items, 'θ̂*', g.bTop, g.bBase);
+    placeLabels(ctx, items, g.bTop, g.x0, g.x1);
+  }
+  if (!cur.k && !st.boots.length && !st.flights.length) {
+    ctx.font = FONT.smallI; ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Press Draw one or Play: each draw copies a random point of our sample down here.', g.x0 + g.pw / 2, g.bTop + g.bH / 2);
+  }
+  // title
+  let info;
+  if (!cur.k) info = `${n} draws with replacement`;
+  else if (!cur.done) info = `draw ${cur.k} of ${n}`;
+  else {
+    const fem = S.fem ? ` · ${cur.fem} female, ${n - cur.fem} male` : '';
+    info = `${n - cur.left} distinct · ${cur.left} left out (${pct(cur.left / n)})` + fem;
+  }
+  const no = cur.k ? ` ${intf(cur.no)}` : '';
+  drawTitle(ctx, g.bT, [['BOOTSTRAP SAMPLE' + no, C.boot]], null, info);
+  xTicks(ctx, g.Xd, DX[0], DX[1], g.bBase + 5, st.ds.xlab);
+}
+
+function drawConnector(ctx) {
+  if (!STATS[st.stat].loc) return;
+  const g = G, xa = g.Xd(H.lo), xb = g.Xd(H.hi);
+  if (xb - xa > g.pw * 0.85) return;
+  const y0 = g.bBase + 21, y1 = g.cT - 1;
+  ctx.fillStyle = rgba(C.boot, 0.28); ctx.fillRect(xa, g.bBase - 1, Math.max(2, xb - xa), 3);
+  ctx.strokeStyle = rgba(C.muted, 0.55); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(xa, y0); ctx.lineTo(g.x0, y1); ctx.moveTo(xb, y0); ctx.lineTo(g.x1, y1); ctx.stroke(); ctx.setLineDash([]);
+}
+
+function barTop(v, yScale) { return G.cBase - H.counts[binOfV(v)] * yScale; }
+function drawC(ctx, now) {
+  const g = G, B = st.boots.length, T = st.showTruth ? truth() : null, P = pop();
+  const plotH = g.cH - 30;
+  // y scale: counts; grows in nice steps and never shrinks while resampling
+  let mx = 0; for (let b = 0; b < H.nb; b++) mx = Math.max(mx, H.counts[b]);
+  if (T && H.tp && B) for (let b = 0; b < H.nb; b++) mx = Math.max(mx, H.tp[b] * B);
+  if (mx * 1.08 > st.yMax) { const s = niceStep(mx * 1.08 / 4); st.yMax = Math.ceil(mx * 1.08 / s) * s; }
+  const yS = plotH / st.yMax;
+  // grid + y ticks
+  const ys = niceStep(st.yMax / 4);
+  ctx.font = FONT.tick; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= st.yMax + 1e-9; v += ys) {
+    const y = Math.round(g.cBase - v * yS) + .5;
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(g.x0, y); ctx.lineTo(g.x1, y); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.fillText(intf(v), g.x0 - 6, y);
+  }
+  ctx.fillStyle = C.muted; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('count', g.x0 - 6, g.cBase - st.yMax * yS - 7);
+  // bars
+  const bwPx = g.pw / H.nb, lastB = isFinite(st.lastV) ? binOfV(st.lastV) : -1;
+  for (let b = 0; b < H.nb; b++) {
+    const c = H.counts[b]; if (!c) continue;
+    const x = g.x0 + b * bwPx, hgt = c * yS;
+    ctx.fillStyle = rgba(C.boot, st.hover && st.hover.kind === 'c' && st.hover.b === b ? 0.8 : 0.5);
+    ctx.fillRect(x + 0.5, g.cBase - hgt, Math.max(1, bwPx - 1), hgt);
+    ctx.fillStyle = C.boot; ctx.fillRect(x + 0.5, g.cBase - hgt, Math.max(1, bwPx - 1), Math.min(hgt, b === lastB ? 3 : 1.5));
+  }
+  baseLine(ctx, g.cBase);
+  // true sampling distribution (expected counts for B samples from the population)
+  if (T && H.tp && B) {
+    const dx = st.alignT * (g.Xs(thetaHat()) - g.Xs(thetaTrue()));
+    ctx.save(); ctx.beginPath(); ctx.rect(g.x0, g.cTop, g.pw, g.cH); ctx.clip();
+    ctx.beginPath(); ctx.moveTo(g.x0 + dx, g.cBase);
+    for (let b = 0; b < H.nb; b++) { const y = g.cBase - H.tp[b] * B * yS; ctx.lineTo(g.x0 + b * bwPx + dx, y); ctx.lineTo(g.x0 + (b + 1) * bwPx + dx, y); }
+    ctx.lineTo(g.x1 + dx, g.cBase);
+    ctx.strokeStyle = C.pop; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.restore();
+    let pk = 0; for (let b = 1; b < H.nb; b++) if (H.tp[b] > H.tp[pk]) pk = b;
+    const lx = g.x0 + (pk + 1) * bwPx + dx + 6, ly = g.cBase - H.tp[pk] * B * yS;
+    const lab = st.alignT > 0.5 ? 'true sampling distribution, slid over to our estimate' : 'true sampling distribution';
+    ctx.font = FONT.smallI; const lw = ctx.measureText(lab).width;
+    halo(ctx, lab, lx + lw > g.x1 ? g.x0 + pk * bwPx + dx - 6 : lx, Math.max(g.cTop + 30, ly + 4), C['pop-ink'], FONT.smallI, lx + lw > g.x1 ? 'right' : 'left', 'top');
+  }
+  if (T && !B) {
+    halo(ctx, 'Resample to compare with the true sampling distribution.', g.x0 + g.pw / 2, g.cTop + g.cH / 2 + 12, C['pop-ink'], FONT.smallI, 'center', 'middle');
+  } else if (!B) {
+    halo(ctx, 'Each finished bootstrap sample adds its estimate to this histogram.', g.x0 + g.pw / 2, g.cTop + g.cH / 2 + 12, C.muted, FONT.smallI, 'center', 'middle');
+  }
+  // θ̂ from each sample we drew from the population
+  if (st.thetaHats.length > 1 && P && st.showPop) {
+    for (const v of st.thetaHats) { if (v < H.lo || v > H.hi) continue; dot(ctx, g.Xs(v), g.cBase - 5, 3, C.pop, C.surface, 1); }
+  }
+  // lines and labels
+  const items = [];
+  const vline = (v, color, dash, w) => { const x = g.Xs(v); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(x, g.cBase); ctx.lineTo(x, g.cTop + 14); ctx.stroke(); ctx.setLineDash([]); return x; };
+  if (st.showCI && B >= 20 && st.sorted) {
+    const lo = quantileSorted(st.sorted, 0.025), hi = quantileSorted(st.sorted, 0.975);
+    items.push({x: vline(lo, C.boot, [], 1.5), sym: '2.5%', val: null, color: C.boot, side: 'left'});
+    items.push({x: vline(hi, C.boot, [], 1.5), sym: '97.5%', val: null, color: C.boot, side: 'right'});
+  }
+  if (P && st.showPop && thetaTrue() >= H.lo && thetaTrue() <= H.hi) items.push({x: vline(thetaTrue(), C.pop, [5, 4], 1.6), sym: 'θ', val: null, color: C['pop-ink'], side: thetaTrue() < thetaHat() ? 'left' : 'right'});
+  items.push({x: vline(thetaHat(), C.ink, [], 2), sym: 'θ̂', val: null, color: C.ink, side: thetaHat() <= thetaTrue() ? 'left' : 'right'});
+  placeLabels(ctx, items.reverse(), g.cTop, g.x0, g.x1);
+  // most recent bootstrap estimate
+  if (isFinite(st.lastV)) {
+    const x = g.Xs(st.lastV), y = barTop(st.lastV, yS) - 4;
+    ctx.fillStyle = C.boot; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 4, y - 6); ctx.lineTo(x + 4, y - 6); ctx.closePath(); ctx.fill();
+  }
+  // flights from the bootstrap sample down into the histogram
+  for (const f of st.flights) {
+    const t = (now - f.t0) / f.dur; if (t < 0) continue;
+    const e = easeIO(clamp(t, 0, 1));
+    const x0 = STATS[st.stat].loc ? g.Xd(f.v) : g.Xd(f.cur.mean), y0 = g.bTop + (STATS[st.stat].loc ? 16 : 8);
+    const x1 = g.Xs(f.v), y1 = g.cBase - (H.counts[binOfV(f.v)] + 1) * yS;
+    const cx = x1, cy = y0;
+    const x = (1 - e) ** 2 * x0 + 2 * (1 - e) * e * cx + e * e * x1, y = (1 - e) ** 2 * y0 + 2 * (1 - e) * e * cy + e * e * y1;
+    ctx.fillStyle = C.boot; ctx.strokeStyle = C.surface; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 5, y); ctx.closePath(); ctx.stroke(); ctx.fill();
+  }
+  const sname = STATS[st.stat].name;
+  drawTitle(ctx, g.cT, [['BOOTSTRAP DISTRIBUTION', C.boot], [' OF THE ' + sname.toUpperCase(), C.muted]], null, `B = ${intf(B)} bootstrap samples`);
+  xTicks(ctx, g.Xs, H.lo, H.hi, g.cBase + 5, `${sname} of each bootstrap sample`);
+}
+
+function render(now) {
+  if (!G || !DL) return;
+  const ctx = setup();
+  drawA(ctx, now); drawB(ctx, now); drawConnector(ctx); drawC(ctx, now);
+}
+
+/* ---------- results panel ---------- */
+function updateResults() {
+  if (!st.dirty) return; st.dirty = false;
+  const B = st.boots.length;
+  if (B >= 20) st.sorted = Float64Array.from(st.boots).sort(); else st.sorted = null;
+  const se = B > 1 ? Math.sqrt(Math.max(0, (st.sumsq - st.sum * st.sum / B) / (B - 1))) : NaN;
+  const th = thetaHat(), P = pop(), T = P ? truth() : null, s = STATS[st.stat], n = nObs();
+  const rows = [];
+  const row = (label, v, sub, cls) => rows.push(`<tr class="${cls || ''}"><td>${label}${sub ? `<span class="s">${sub}</span>` : ''}</td><td class="v">${v}</td></tr>`);
+  const sec = (label, color) => rows.push(`<tr class="sec"><td colspan="2"><span class="sw" style="--c:${color}"></span>${label}</td></tr>`);
+  sec('From our sample', 'var(--ink)');
+  row(`Our estimate <span class="m hat">θ</span>`, fmt(th), s.name);
+  row(`Bootstrap SE`, B > 1 ? fmt(se) : '—', `sd(<span class="m hat">θ</span>*) over B = ${intf(B)}`);
+  let ci = null;
+  if (st.sorted) ci = [quantileSorted(st.sorted, .025), quantileSorted(st.sorted, .975)];
+  row('95% percentile interval', ci ? `[${fmt(ci[0])}, ${fmt(ci[1])}]` : '—', ci ? '2.5% and 97.5% quantiles of the bootstrap estimates' : 'needs B ≥ 20');
+  if (st.stat === 'mean') row('Formula SE', fmt(Math.sqrt(varOf(st.sample.x) / n)), 'sd(y) / √n, the mean only');
+  if (st.leftN) {
+    const exp = (1 - 1 / n) ** n;
+    row('Left out per bootstrap sample', pct(st.leftSum / st.leftN), `expected (1 − 1/n)ⁿ = ${pct(exp)} ≈ e⁻¹ = 36.8%`);
+  }
+  if (P && (st.showPop || st.showTruth)) {
+    sec('Population (unknown in practice)', 'var(--pop)');
+    if (st.showPop) {
+      let badge = '';
+      if (ci) { const ok = thetaTrue() >= ci[0] && thetaTrue() <= ci[1]; badge = ` <span class="status ${ok ? 'good' : 'bad'}">${ok ? 'inside' : 'outside'} the interval</span>`; }
+      row(`True value <span class="m">θ</span>`, fmt(thetaTrue()), badge ? badge : (P.finite ? 'computed on the whole population' : 'from the distribution'));
+    }
+    if (st.showTruth && T) {
+      row('True SE', fmt(T.se), `sd of <span class="m hat">θ</span> over ${intf(T.M)} new samples`);
+      if (B > 1) row('Bootstrap SE ÷ true SE', (se / T.se).toFixed(2), 'near 1 means the bootstrap got the spread right');
+    }
+  }
+  rows[rows.length - 1] = rows[rows.length - 1].replace('<tr class="', '<tr class="last ');
+  $('res').innerHTML = rows.join('');
+}
+
+/* ---------- R code ---------- */
+function rCode() {
+  const ds = st.ds, s = st.stat, sl = ds.slides && ds.slides[s] && !st.sampleNo ? ds.slides[s] : null;
+  const vec = {mean: 'bootstrap_means', median: 'bootstrap_medians', sd: 'bootstrap_sds', var: 'bootstrap_vars', ipw: 'boot_ipw'}[s];
+  const L = [];
+  const cm = t => `<span class="cm">${esc(t)}</span>`;
+  const pad = (code, c) => esc(code) + ' '.repeat(Math.max(1, 46 - code.length)) + cm('# ' + c);
+  if (ds.id === 'hawks') {
+    L.push(cm('# samp: the biased sample of 50 hawks (sampling lecture, set.seed(8888))'));
+    if (st.sampleNo) L.push(pad('samp <- hawk_pop_wt |> slice_sample(n = 50, weight_by = samp_weight)', 'a new biased sample'));
+    if (s === 'ipw') L.push(esc('ipw_mean <- function(lengths, samp_weights) {\n  w <- 1 / samp_weights\n  sum(w * lengths) / sum(w)\n}'));
+    const v = s === 'ipw' ? 'boot_ipw' : s === 'mean' ? 'boot_naive' : vec;
+    const f = s === 'ipw' ? 'ipw_mean(boot_hawks$length, boot_hawks$samp_weight)' : `${STATS[s].r}(boot_hawks$length)`;
+    L.push('', esc(`n_bootstrap <- 2000\n${v} <- numeric(n_bootstrap)\nfor (rep_id in 1:n_bootstrap) {`));
+    L.push('  ' + esc('boot_hawks <- samp |> slice_sample(n = nrow(samp), replace = TRUE)') + '  ' + cm('# whole hawks'));
+    L.push(esc(`  ${v}[rep_id] <- ${f}\n}`));
+    L.push(pad(`sd(${v})`, 'bootstrap SE' + (sl ? ` (slides: ${sl.se})` : '')));
+    L.push(pad(`quantile(${v}, probs = c(0.025, 0.975))`, '95% percentile interval' + (sl && sl.ci ? ` (slides: ${sl.ci})` : '')));
+    return L.join('\n');
+  }
+  if (ds.id === 'lego') {
+    if (st.sampleNo) L.push(esc('one_theme_num_parts <- lego_all |>\n  filter(theme_name == "Friends") |>\n  pull(num_parts) |>') + '\n' + pad('  sample(size = 70)', 'a new sample: 70 of the 286 sets'));
+    else L.push(esc('one_theme_num_parts <- lego_sample |>\n  filter(theme_name == "Friends") |>\n  pull(num_parts)'));
+    const v = s === 'sd' ? 'boot_sds' : vec;
+    L.push('', esc(`${v} <- numeric(2000)\nfor (boot_id in 1:2000) {\n  boot_sample <- sample(one_theme_num_parts, replace = TRUE)\n  ${v}[boot_id] <- ${STATS[s].r}(boot_sample)\n}`));
+    L.push(pad(`sd(${v})`, 'bootstrap SE' + (sl ? ` (slides: ${sl.se})` : '')));
+    L.push(pad(`quantile(${v}, probs = c(0.025, 0.975))`, '95% percentile interval'));
+    return L.join('\n');
+  }
+  const x = ds.rv;
+  if (st.sampleNo) L.push(pad(ds.rNew, 'a new sample, no seed'));
+  else L.push(esc(ds.rData));
+  L.push(pad(`${STATS[s].r}(${x})`, `our estimate: ${fmt(thetaHat())}`));
+  L.push('', esc(`n_bootstrap <- 2000\n${vec} <- numeric(n_bootstrap)\nfor (rep_id in 1:n_bootstrap) {\n  boot_sample <- sample(${x}, size = length(${x}), replace = TRUE)\n  ${vec}[rep_id] <- ${STATS[s].r}(boot_sample)\n}`));
+  L.push(pad(`sd(${vec})`, 'bootstrap SE' + (sl ? ` (slides: ${sl.se})` : '')));
+  L.push(pad(`quantile(${vec}, probs = c(0.025, 0.975))`, '95% percentile interval' + (sl && sl.ci ? ` (slides: ${sl.ci})` : '')));
+  if (sl && sl.note) L.push(cm(`# slides also report: ${sl.note}`));
+  return L.join('\n');
+}
+
+/* ---------- UI ---------- */
+function buildLegend() {
+  const P = pop(), S = st.sample;
+  const it = [];
+  if (P && st.showPop) it.push(`<span class="li"><span class="sw area"></span>Population, scaled to <span class="m">n</span> points</span>`);
+  it.push(`<span class="li"><span class="sw dot" style="--c:var(--pt)"></span>Our sample</span>`);
+  it.push(`<span class="li"><span class="sw dot" style="--c:var(--boot)"></span>Drawn into the bootstrap sample</span>`);
+  if (S.fem) it.push(`<span class="li"><span class="sw dot" style="--c:var(--ink-2)"></span>female</span><span class="li"><span class="sw ring" style="--c:var(--ink-2)"></span>male</span>`);
+  it.push(`<span class="li"><span class="sw line" style="--c:var(--ink)"></span><span class="m hat">θ</span> our estimate</span>`);
+  it.push(`<span class="li"><span class="sw line" style="--c:var(--boot)"></span><span class="m hat">θ</span>* bootstrap estimate</span>`);
+  if (P && st.showPop) it.push(`<span class="li"><span class="sw line dashed" style="--c:var(--pop)"></span><span class="m">θ</span> true value</span>`);
+  if (st.thetaHats.length > 1 && P && st.showPop) it.push(`<span class="li"><span class="sw dot" style="--c:var(--pop)"></span><span class="m hat">θ</span> of each sample drawn so far</span>`);
+  if (!STATS[st.stat].loc) it.push(`<span class="li" style="color:var(--muted)">|—| spread shown as mean ± SD</span>`);
+  $('legend').innerHTML = it.join('');
+}
+function buildStatSeg() {
+  const ids = ['mean', 'median', 'sd', 'var'].concat(st.ds.id === 'hawks' ? ['ipw'] : []);
+  $('statSeg').innerHTML = ids.map(id => `<button type="button" data-stat="${id}" aria-pressed="${id === st.stat}">${STATS[id].label}</button>`).join('');
+}
+function syncButtons() {
+  const playing = st.mode === 'play';
+  $('play').textContent = playing ? '❚❚ Pause' : '▶ Play';
+  $('play').setAttribute('aria-pressed', playing);
+  $('drawFull').textContent = cur && cur.k && !cur.done ? 'Finish sample' : 'Full sample';
+  const P = pop();
+  $('newSample').disabled = !P;
+  $('newSample').title = P ? '' : 'There is no population to draw from: the 14 shells are all we have.';
+  $('lectureSample').hidden = !st.sampleNo;
+  for (const [id, wrap, on] of [['showPop', 'popWrap', !!P], ['showTruth', 'truthWrap', !!P], ['align', 'alignWrap', !!P && st.showTruth]]) {
+    $(id).disabled = !on; $(wrap).classList.toggle('off', !on);
+  }
+  $('speedOut').textContent = (rate() < 10 ? rate().toFixed(1) : intf(Math.round(rate()))) + ' draws/s';
+}
+function setSpeedDefault() {
+  st.speed = clamp(Math.round((Math.log10(nObs() / 4) + 0.2) / 3.9 * 100), 0, 100); $('speed').value = st.speed;
+}
+function loadSample(S, isNew) {
+  st.sample = S;
+  if (isNew) st.sampleNo++; else st.sampleNo = 0;
+  const n = S.x.length;
+  vals = new Float64Array(n); sws = new Float64Array(n); mark = new Uint8Array(n);
+  DX = dataRange();
+  POPCURVE = popCurve();
+  geometry(); layoutDots(); setupHist();
+  resetBoot();
+  if (!isNew) st.thetaHats = [];
+  st.thetaHats.push(thetaHat());
+  $('rcode').innerHTML = rCode();
+  buildLegend(); syncButtons(); st.dirty = true; updateResults(); request();
+}
+function setDataset(id, keepStat) {
+  st.ds = DS[id] || DATASETS[0];
+  if (!keepStat || (keepStat === 'ipw' && st.ds.id !== 'hawks')) st.stat = st.ds.stat; else st.stat = keepStat;
+  $('dataset').value = st.ds.id;
+  $('dsNote').innerHTML = st.ds.note;
+  stopPlay(); buildStatSeg();
+  st.sampleNo = 0; st.thetaHats = [];
+  loadSample(st.ds.lecture(), false);
+  setSpeedDefault(); syncButtons();
+}
+function setStat(id) {
+  st.stat = id; stopPlay(); buildStatSeg();
+  DX = dataRange(); geometry(); layoutDots(); setupHist(); resetBoot();
+  st.thetaHats = [thetaHat()];
+  $('rcode').innerHTML = rCode(); buildLegend(); syncButtons(); st.dirty = true; updateResults(); request();
+}
+function stopPlay() { if (st.mode !== 'idle') { st.mode = 'idle'; syncButtons(); } }
+function play() {
+  if (st.mode === 'play') { stopPlay(); return; }
+  st.mode = 'play'; st.last = performance.now();
+  if (cur.done) cur.nextAt = Math.min(cur.nextAt, performance.now());
+  st.budget = Math.max(st.budget, 1); syncButtons(); request();
+}
+function drawOne() {
+  stopPlay(); const now = performance.now();
+  if (cur.done) { landFlights(now, true); newCur(); }
+  doDraw(now, reduceMotion ? 0 : 450, {manual: true});
+  syncButtons(); request();
+}
+function drawFull() {
+  const now = performance.now();
+  if (st.mode === 'play') stopPlay();
+  if (cur.done) { landFlights(now, true); newCur(); }
+  st.mode = 'run1'; st.last = now; st.budget = Math.max(st.budget, 1); syncButtons(); request();
+}
+
+/* ---------- animation loop ---------- */
+let raf = 0;
+function animating(now) {
+  if (st.mode !== 'idle' || st.flights.length) return true;
+  if (cur && cur.draws.length && cur.draws[cur.draws.length - 1].t0 + cur.draws[cur.draws.length - 1].dur > now) return true;
+  if (cur && cur.done && now < cur.showAt + 50) return true;
+  if (st.pulses.length && now - st.pulses[st.pulses.length - 1].t0 < 450) return true;
+  if (st.alignT !== (st.align && st.showTruth ? 1 : 0)) return true;
+  return false;
+}
+function frame(now) {
+  raf = 0;
+  step(now); updateResults(); render(now);
+  if (animating(now)) raf = requestAnimationFrame(frame);
+  else st.last = 0;
+}
+function request() { if (!raf) raf = requestAnimationFrame(frame); }
+
+/* ---------- hover ---------- */
+function onMove(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = G, L = DL, S = st.sample;
+  let hov = null, html = '';
+  const unitTxt = st.ds.unit;
+  if (y >= g.aTop && y <= g.aBase + 2) {
+    let best = -1, bd = (L.r + 3) ** 2;
+    for (let i = 0; i < S.x.length; i++) { const d = (L.ax[i] - x) ** 2 + (L.ay[i] - y) ** 2; if (d < bd) { bd = d; best = i; } }
+    if (best >= 0) {
+      hov = {kind: 'a', i: best};
+      const c = cur.cnt[best];
+      const name = S.names ? `${esc(S.names[best])} (${S.years[best]})` : S.ids ? `Hawk ${S.ids[best]}, ${S.fem[best] ? 'female' : 'male'}` : `Observation ${best + 1}`;
+      html = `<b>${name}</b><span class="num">${fmt(S.x[best], st.ds.integer ? 0 : 2)}${unitTxt}</span>` +
+        (S.sw ? `<span class="num">sampling weight ${S.sw[best]}, IPW weight 1/${S.sw[best]}</span>` : '') +
+        `<span class="num">${cur.k ? `drawn ${c}× so far in this bootstrap sample` : 'not drawn yet'}</span>`;
+    }
+  } else if (y >= g.bTop && y <= g.bBase + 2 && cur.draws.length) {
+    let maxRows = 1; for (let b = 0; b < L.nb; b++) maxRows = Math.max(maxRows, Math.ceil(cur.fill[b] / L.cols));
+    const rowStep = Math.min(L.d, (g.bH - 6) / maxRows), now = performance.now();
+    let best = -1, bd = (L.r + 3) ** 2;
+    cur.draws.forEach((d, j) => { const [px, py] = bootPos(d, now, rowStep); const dd = (px - x) ** 2 + (py - y) ** 2; if (dd < bd) { bd = dd; best = j; } });
+    if (best >= 0) {
+      const d = cur.draws[best];
+      hov = {kind: 'b', j: best};
+      html = `<b>Draw ${best + 1} of ${S.x.length}</b><span class="num">copy of observation ${d.i + 1}: ${fmt(S.x[d.i], st.ds.integer ? 0 : 2)}${unitTxt}</span><span class="num">this observation appears ${cur.cnt[d.i]}× in the bootstrap sample</span>`;
+    }
+  } else if (y >= g.cTop && y <= g.cBase && x >= g.x0 && x <= g.x1 && st.boots.length) {
+    const b = clamp(Math.floor((x - g.x0) / g.pw * H.nb), 0, H.nb - 1), c = H.counts[b];
+    hov = {kind: 'c', b};
+    html = `<b>Bootstrap estimates from ${fmt(H.lo + b * H.bw)} to ${fmt(H.lo + (b + 1) * H.bw)}</b><span class="num">${intf(c)} of ${intf(st.boots.length)} bootstrap samples (${pct(c / st.boots.length)})</span>`;
+  }
+  st.hover = hov;
+  const tip = $('tip');
+  if (hov) {
+    tip.innerHTML = html; tip.hidden = false;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = clamp(x + 14, 0, r.width - tw) + 'px';
+    tip.style.top = (y - th - 10 < 0 ? y + 16 : y - th - 10) + 'px';
+  } else tip.hidden = true;
+  request();
+}
+
+/* ---------- wiring ---------- */
+$('dataset').innerHTML = DATASETS.map(d => `<option value="${d.id}">${esc(d.label)}</option>`).join('');
+$('dataset').addEventListener('change', e => { setDataset(e.target.value); try { history.replaceState(null, '', '#' + e.target.value); } catch (_) {} });
+$('statSeg').addEventListener('click', e => { const b = e.target.closest('button[data-stat]'); if (b && b.dataset.stat !== st.stat) setStat(b.dataset.stat); });
+$('newSample').addEventListener('click', () => {
+  const P = pop(); if (!P) return; stopPlay();
+  const S = P.draw(st.ds.lecture().x.length, rnd);
+  loadSample(S, true);
+});
+$('lectureSample').addEventListener('click', () => { stopPlay(); st.thetaHats = []; loadSample(st.ds.lecture(), false); });
+$('play').addEventListener('click', play);
+$('drawOne').addEventListener('click', drawOne);
+$('drawFull').addEventListener('click', drawFull);
+$('add100').addEventListener('click', () => bulk(100));
+$('add1000').addEventListener('click', () => bulk(1000));
+$('reset').addEventListener('click', () => { stopPlay(); resetBoot(); syncButtons(); updateResults(); request(); });
+$('speed').addEventListener('input', e => { st.speed = +e.target.value; syncButtons(); });
+$('showPop').addEventListener('change', e => { st.showPop = e.target.checked; layoutDots(); remapCur(); buildLegend(); st.dirty = true; updateResults(); request(); });
+$('showTruth').addEventListener('change', e => { st.showTruth = e.target.checked; if (!st.showTruth) { st.align = false; $('align').checked = false; } syncButtons(); st.dirty = true; updateResults(); request(); });
+$('align').addEventListener('change', e => { st.align = e.target.checked; request(); });
+$('showCI').addEventListener('change', e => { st.showCI = e.target.checked; request(); });
+cv.addEventListener('pointermove', onMove);
+cv.addEventListener('pointerleave', () => { st.hover = null; $('tip').hidden = true; request(); });
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target, tag = t && t.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter'))) return;
+  if (e.key === ' ') { e.preventDefault(); play(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); drawOne(); }
+  else if (e.key === 'Enter') { e.preventDefault(); drawFull(); }
+});
+// re-map the current bootstrap sample's bins after a relayout (bins depend on the dot size)
+function remapCur() {
+  if (!cur) return;
+  const fill = new Int32Array(DL.nb);
+  for (const d of cur.draws) { d.b = DL.binOf[d.i]; d.slot = fill[d.b]++; d.dur = 0; }
+  cur.fill = fill;
+}
+const mq = matchMedia('(prefers-color-scheme: dark)');
+const retheme = () => { readTokens(); request(); };
+mq.addEventListener ? mq.addEventListener('change', retheme) : mq.addListener(retheme);
+new MutationObserver(retheme).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme', 'class', 'style']});
+let lastW = 0;
+new ResizeObserver(() => {
+  const w = cv.getBoundingClientRect().width;
+  if (!st.sample || Math.abs(w - lastW) < 0.5) return;
+  lastW = w; geometry(); layoutDots(); remapCur(); request();
+}).observe(cv);
+window.addEventListener('resize', () => { if (document.body.classList.contains('compact')) { geometry(); layoutDots(); remapCur(); request(); } });
+
+// Deep links for iframes in the slides: ?data=hawks&stat=mean&pop=1&truth=1&align=1&ci=0&speed=60&B=2000&play=1&compact=1, or #whelk
+readTokens();
+const q = new URLSearchParams(location.search), hash = location.hash.replace('#', '');
+if (q.get('compact') === '1') document.body.classList.add('compact');
+const want = q.get('data') || (DS[hash] ? hash : 'pois50');
+const flag = (k, def) => q.has(k) ? q.get(k) === '1' : def;
+st.showPop = flag('pop', true); st.showTruth = flag('truth', false); st.align = flag('align', false) && st.showTruth; st.showCI = flag('ci', true);
+$('showPop').checked = st.showPop; $('showTruth').checked = st.showTruth; $('align').checked = st.align; $('showCI').checked = st.showCI;
+st.alignT = st.align ? 1 : 0;
+setDataset(want, q.get('stat') && STATS[q.get('stat')] ? q.get('stat') : null);
+lastW = cv.getBoundingClientRect().width;
+if (q.has('speed')) { st.speed = clamp(+q.get('speed') || 0, 0, 100); $('speed').value = st.speed; syncButtons(); }
+if (+q.get('B') > 0) bulk(Math.min(20000, Math.round(+q.get('B'))));
+if (q.get('play') === '1') play();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => request());
+window.addEventListener('hashchange', () => { const h = location.hash.replace('#', ''); if (DS[h] && h !== st.ds.id) setDataset(h); });
+})();
+</script>
+</body>
+</html>

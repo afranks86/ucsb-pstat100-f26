@@ -1,0 +1,1080 @@
+---
+ title: "Bootstrapping"
+ format:
+   revealjs:
+     theme: default
+     slide-number: true
+     preview-links: auto
+     html-math-method: mathjax
+     scrollable: true
+     width: 1280
+     embed-resources: true
+ execute:
+   eval: true
+   echo: true
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(ggridges)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(dplyr)
+```
+ 
+## Bootstrapping / Bootstrap
+
+We are going to learn a general method that aims to address:
+
+ - How much uncertainty is associated with an estimate.
+ - Specifically, how to calculate the standard error of a (potentially complicated) statistic.
+
+. . . 
+
+This can then be used to answer questions such as:
+
+ - Is the new treatment genuinely more effective than the standard one, or could the difference be due to chance?
+ - Is this month’s drop in car rentals a real trend or just random fluctuation?
+ - What is a 95\% confidence interval for the true vaccination rate in the population?
+ 
+# Recap: sampling distributions
+
+## Recall: population and sample
+
+From the sampling lecture: we want the average length $\mu$ of red-tailed hawks in the Santa Barbara area.
+
+- **Target population:** all the hawks. We simulated 500 of them, so in simulation we know the we know true $\mu$.
+- **Sample:** the 50 hawks we imagine capturing and measuring, chosen by SRS.
+- **Estimate:** the sample mean $\hat\mu$, computed from the sample.
+
+## Recall: population and sample
+```{r, echo = FALSE}
+# same population and SRS sample as the sampling lecture (same code, same seeds)
+set.seed(8888)
+
+n_female <- 250
+n_male <- 250
+
+female_hawks <- tibble(
+  length = rnorm(n = n_female, mean = 57.5, sd = 3),
+  sex = "female"
+)
+
+male_hawks <- tibble(
+  length = rnorm(n = n_male, mean = 50.5, sd = 3),
+  sex = "male"
+)
+
+hawk_pop <- bind_rows(female_hawks, male_hawks) |>
+  mutate(bird_id = str_c("H", sprintf("%03d", row_number()))) |>
+  select(bird_id, sex, length)
+
+num_hawks <- nrow(hawk_pop)
+population_mean <- mean(hawk_pop$length)
+
+set.seed(123)
+sample_indices <- sample(1:num_hawks, 50)
+hawk_sample <- hawk_pop |> slice_sample(n = 50, replace = FALSE)
+hawk_sample_mean <- mean(hawk_sample$length)
+```
+
+```{r, echo = FALSE}
+#| fig-width: 12
+#| fig-height: 4.5
+panel_levels <- c("Population: 500 hawks (unknown in practice)",
+                  "Our sample: 50 hawks (observed)")
+
+recap_df <- bind_rows(
+  hawk_pop |> mutate(panel = panel_levels[1]),
+  hawk_sample |> mutate(panel = panel_levels[2])
+) |>
+  mutate(panel = factor(panel, levels = panel_levels))
+
+recap_means <- tibble(
+  panel = factor(panel_levels, levels = panel_levels),
+  value = c(population_mean, hawk_sample_mean),
+  label = c(paste("true mean =", round(population_mean, 1)),
+            paste("sample mean =", round(hawk_sample_mean, 1)))
+)
+
+ggplot(recap_df, aes(x = length)) +
+  geom_histogram(binwidth = 0.75, fill = "lightgray", color = "black") +
+  geom_vline(data = recap_means, aes(xintercept = value),
+             color = "#663B8C", linetype = "dashed", linewidth = 1) +
+  geom_text(data = recap_means,
+            aes(x = value + 0.5, y = Inf, label = label),
+            vjust = 1.5, hjust = 0, size = 5, color = "gray20") +
+  facet_wrap(~ panel, scales = "free_y") +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.2))) +
+  labs(x = "Length (cm)", y = "Number of birds") +
+  theme_bw(base_size = 16)
+```
+
+In practice we only ever see the right panel. The left panel, and $\mu$, are unknown. That is why we sample.
+
+## Recall: the sampling distribution
+
+The sample mean $\hat\mu$ is a **random variable**. Its randomness comes from *which* hawks happen to be selected: a different sample of 50 would give a different $\hat\mu$.
+
+Its probability distribution is called the **sampling distribution**.
+
+. . .
+
+The sampling distribution is **counterfactual**. We imagine many possible worlds, each running the same study but drawing different hawks from the same population. In reality, we can only run the study once.
+
+. . .
+
+A common misconception: the sampling distribution of $\hat\mu$ is **not** the distribution of individual hawk lengths. Averages vary much less than individuals do.
+
+## Recall: simulating the sampling distribution
+
+Because we invented the population, we can draw as many samples from it as we like. This is the simulation from the sampling lecture:
+
+```{r}
+set.seed(123)
+sample_size <- 50
+num_reps <- 5e4
+sample_means <- numeric(num_reps)
+
+for (i in 1:num_reps) {
+  sample_indices <- sample(1:nrow(hawk_pop), sample_size, replace = FALSE)
+  sample_means[i] <- mean(hawk_pop[sample_indices, ]$length)
+}
+```
+
+```{r, echo = FALSE}
+#| fig-width: 10
+#| fig-height: 4.5
+ggplot(tibble(sample_mean = sample_means), aes(x = sample_mean)) +
+  geom_histogram(binwidth = 0.05, fill = "#3B8C66", color = "black") +
+  geom_vline(xintercept = population_mean,
+             color = "#8C663c", linetype = "dashed", linewidth = 1) +
+  annotate("text", x = population_mean + 0.1, y = Inf,
+           vjust = 1.5, hjust = 0, size = 5,
+           label = "true mean (unknown in practice)") +
+  labs(title = "Sampling distribution of the sample mean (simulated)",
+       x = "Sample mean length (cm)", y = "Count") +
+  theme_bw(base_size = 16)
+```
+
+```{r}
+sd(hawk_pop$length) # spread of individual hawk lengths
+sd(sample_means)    # spread of the sampling distribution of the sample mean
+```
+
+${\rm SD}(\hat\mu)$ is called the **standard error** of $\hat(\mu)$: roughly how far a typical estimate lands from $\mu$.
+
+## In reality we only have the sample
+
+Simulation only worked because we imagined having access to the whole population.
+
+| | Simulation (sampling lecture) | A real study |
+|---|---|---|
+| Population | known | **unavailable** |
+| Number of samples | as many as we like | **one** |
+| Sampling distribution | a histogram we can generate | **never seen** |
+
+
+
+. . . 
+
+If we knew the population, we wouldn't need to sample in the first place. And we can't go back to the field and catch 50,000 more sets of 50 hawks.
+
+. . .
+
+So how do we estimate the standard error from our **one** sample?
+
+## Quantifying uncertainty
+
+**Estimating standard errors is one of the foundational goals of statistics.**
+
+How do statisticians estimate standard errors from a single sample?
+
+- **Math:** derive a formula for the standard error
+- **Computational:** use algorithms to try to approximate the standard error
+- **Bayesian Frameworks**: PSTAT 115
+
+## Math for ``simple'' estimators 
+
+Let's begin with sample mean $\hat \mu$ estimating the population mean $\mu$.
+
+We know $\hat \mu$ is an unbiased estimator of $\mu$ given IID samples (sample size $n$):
+
+$$
+E[\hat \mu] = n^{-1}\sum_{i=1}^n E[Y_i] = E[Y_1]  = \mu
+$$
+
+. . . 
+
+We also know its theoretical variance for IID samples:
+
+$$
+Var[\hat \mu] = n^{-2}Var(\sum_{i=1}^n Y_i) = n^{-2}\sum_{i=1}^n Var[Y_i] = n^{-1}Var[Y_1]
+$$
+
+## Math for ``simple'' estimators 
+
+We *estimate* the variance of $Y_1$ by
+
+$$
+\widehat{Var}[Y_1] = \frac{1}{n-1} \sum_{i=1}^n\left(Y_i-\hat\mu\right)^2 \text{ or }\frac{1}{n} \sum_{i=1}^n\left(Y_i-\hat\mu\right)^2.
+$$
+
+So our estimate of $Var[\hat \mu]$ is 
+
+$$\widehat{Var}[\hat \mu] = n^{-1}\widehat{Var}[Y_1] = \frac{1}{n(n-1)} \sum_{i=1}^n\left(Y_i-\hat{\mu}\right)^2$$
+
+## Sometimes the math is too hard
+
+- What about the variance of sample median?
+
+- Sample correlation coefficient?
+
+- Variance of sample variance?
+
+- The inverse probability weighted (IPW) estimate of hawk length from the sampling lecture?
+
+. . .
+
+Are there options without figuring out the math?
+
+# Bootstrap the sample mean
+
+## The bootstrap
+
+In 1979, Bradley Efron proposed a procedure to estimate the distribution/variability of a **statistic** (a number calculated from our sample).
+
+. . . 
+
+If we had access to the whole population we could just simulate the sampling distribution
+
+The "trick": let's pretend the true population distribution is well approximated by our sample?
+
+## The bootstrap
+
+The name bootstrap originates from the phrase "pull oneself up by one's bootstraps." The phrase refers to situations where someone attempts a very challenging task without relying on external assistance.
+
+<center>![](figures/bootstraps.webp){width="50%"}</center>
+
+
+Bootstrapping does not rely on extra information (formulas, models, etc.) and makes relatively weak modeling assumptions (somewhat in the spirit of the CLT).
+
+. . . 
+
+The word _booting_ in computer science shares the same origin. How can a  computer restart (reboot) itself?
+
+<!-- image downloaded from [this post](https://uselessetymology.com/2019/11/07/the-origins-of-the-phrase-pull-yourself-up-by-your-bootstraps/) has more discussion on this topic. -->
+
+
+
+## Bootstrapping
+
+Suppose we have an IID data sample $(Y_1,\ldots,Y_n)$ of size $n$ from a population. 
+
+
+For example, the $Y_i$ form a SRS (with replacement) from the same population.
+
+```{r}
+set.seed(1)
+sample_size <- 50
+true_var <- true_mean <- 3
+my_sample <- rpois(sample_size, lambda = true_mean) # sample 50 data points from the population
+my_sample |> head()
+sample_mean <- my_sample |> mean()
+sample_mean
+```
+
+. . . 
+
+Bootstrapping treats the sample as a proxy for the target population. It asks us to **resample with replacement** from our sample.
+
+
+
+## Create one bootstrap sample
+
+Create a _bootstrap sample_ of size $n$ by SRS **with** replacement from the (real) sample. This can be easily done using `sample()`
+
+```{r}
+boot_sample <- sample(my_sample, 
+                      size = sample_size, 
+                      replace = TRUE) #create one bootstrap sample from the data
+one_boot_mean <- boot_sample |> mean()
+one_boot_mean
+```
+
+There are two important details:
+
+ - `boot_sample` needs to have the sample size as the original data.
+ - we have to SRS with replacement (why?)
+
+## The complete bootstrap procedure
+
+Repeat many times:
+
+1. Resample with replacement a "new sample"  of the same size from my original sample 
+
+2. Compute more estimate on the "new sample", e.g. compute sample mean. This a ``bootstrap sample'' of my estimate.
+
+The distribution of your many bootstrap samples will reflect the true sampling variability.
+
+## The complete bootstrap procedure
+
+Repeat SRS **with** replacement from the data many times:
+
+```{r}
+n_bootstrap <- 2e3
+bootstrap_means <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(my_sample, 
+                        size = length(my_sample), 
+                        replace = TRUE)
+  bootstrap_means[rep_id] <- mean(boot_sample)
+}
+
+bootstrap_means |> head()
+```
+
+This is very similar to a simulation study, except that in simulation we resample from a **hypothetical population**, while in the bootstrap we resample from the observed **sample**.
+
+. . .
+
+In other words, a simulation study is for methodological investigation of estimators and study plans, whereas `bootstrap_means` is a _statistic_ computed from data.
+
+## Use Bootstrap to quantify variability
+
+Bootstrap uses the variance of `bootstrap_means` as an **estimate** of the variance of sample mean.
+
+```{r, eval = FALSE}
+n_bootstrap <- 2e3
+bootstrap_means <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(my_sample, 
+                        size = length(my_sample), 
+                        replace = TRUE)
+  bootstrap_means[rep_id] <- mean(boot_sample)
+}
+```
+
+
+```{r}
+bootstrap_means |> head()
+boot_var <- var(bootstrap_means)
+boot_var
+```
+
+The method of bootstrapping uses `boot_var` as an estimator of ${\rm Var}(\hat \mu)$. Mathematically, `boot_var` is $\widehat{\rm Var}(\hat \mu)$.
+
+
+## Use Bootstrap to quantify variability
+
+When we report a sample mean, we usually append an estimate of its variability (i.e., the standard error):
+
+$$
+\hat\mu {\rm\ with\ } \widehat{\operatorname{SE}}(\hat \mu) = \hat\mu {\rm\ with\ }  \widehat{\operatorname{SD}}(\hat \mu).
+$$
+
+```{r}
+sample_mean
+boot_se <- sqrt(boot_var)
+boot_se
+# boot_se <- sd(bootstrap_means)
+# boot_se
+```
+
+. . . 
+
+Sample mean $\hat \mu$ is a random variable, so it has a non-zero standard deviation
+
+$$
+{\rm SD}(\hat \mu) = \sqrt{{\rm Var}(\hat \mu)}
+$$
+Very often, people use the word **standard error** equivalently as ${\rm SD}(\hat \mu)$:
+
+$$
+{\rm SE}(\hat \mu) = {\rm SD}(\hat \mu) = \sqrt{{\rm Var}(\hat \mu)}
+$$
+It typically decreases as the sample size grows. For example, "the standard error of the sample mean" is the same as "the standard deviation of the sample mean" = $\sqrt{n^{-1}Var[Y]}$.
+
+. . . 
+
+_Language warning:_ However, people also use the word **standard error** for the estimated standard error:
+
+$$
+\widehat{\rm SE}(\hat \mu) = \widehat{\rm SD}(\hat \mu) = \sqrt{\widehat{\rm Var}(\hat \mu)}
+$$
+
+
+## Formula-based standard error
+
+As we stated in the beginning, we can also use an explicit formula to estimate the standard error of $\hat\mu$
+
+$$\widehat{Var}[\hat \mu] = n^{-1}\widehat{Var}[Y_1] = \frac{1}{n(n-1)} \sum_{i=1}^n\left(Y_i-\hat{\mu}\right)^2$$
+
+```{r}
+sample_mean
+formula_var <- sample_size^(-1) * var(my_sample) #the original data
+formula_var
+formula_se <- sqrt(formula_var)
+formula_se
+```
+
+. . . 
+
+Compare them with the Bootstrap standard error
+
+```{r}
+boot_var
+boot_se
+```
+
+## 
+
+Guess what, we simulated the data. So we know 
+
+$$
+Var[\hat\mu] = n^{-1}Var[Y_1] = n^{-1} \lambda
+$$
+where $\lambda$ is both the mean and variance of a Poisson distribution.
+
+```{r}
+oracle_var <- sample_size^(-1) * true_var #THIS IS NOT A STATISTIC
+oracle_var
+
+oracle_se <- sqrt(oracle_var) 
+oracle_se
+```
+
+What are we computing below? Is `formula_se` or `boot_se` performing slightly better?
+
+```{r}
+formula_se/oracle_se
+boot_se/oracle_se
+```
+ 
+. . . 
+
+Report the sample mean together with its standard error from bootstrap.
+ 
+## Let's try a larger sample size, but everything else stays the same
+
+```{r}
+set.seed(4)
+sample_size <- 500
+true_var <- true_mean <- 3
+my_sample <- rpois(sample_size, lambda = true_mean) # sample 500 data points from the population
+sample_mean <- my_sample |> mean()
+sample_mean
+```
+
+##
+
+```{r}
+n_bootstrap <- 2e3
+bootstrap_means <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(my_sample, 
+                        size = length(my_sample), 
+                        replace = TRUE)
+  bootstrap_means[rep_id] <- mean(boot_sample)
+}
+
+boot_se <- sd(bootstrap_means)
+boot_se
+```
+
+Compare the sample mean with that of sample size = 50. What about its standard error?
+
+```{r}
+oracle_var <- sample_size^(-1) * true_var 
+oracle_var
+oracle_se <- sqrt(oracle_var)
+boot_se / oracle_se
+```
+
+
+## Bootstrap with median
+
+The standard error of sample mean can be assessed using either bootstrapping or explicit formula. For more complicated statistics the formula may not be available. 
+
+. . . 
+
+Sample median, although easy to compute, is mathematically more complicated. Its SE formula is not as transparent.
+
+But we can apply bootstrapping to evaluate the variability of the sample median for data from a $\chi^2$ distribution (which is not the easiest population to work with analytically).
+
+::: {.columns}
+
+```{r}
+set.seed(8)
+sample_size <- 200
+chisq_df <- 2
+my_sample <- rchisq(sample_size,
+                    df = chisq_df) 
+sample_median <- my_sample |> median()
+sample_median
+
+hist(my_sample, col = "#C9BF9D", breaks = 30)
+
+true_median <- qchisq(1/2, df = chisq_df)
+true_median #\mu
+```
+
+:::
+
+
+## Bootstrap resampling
+
+Similar to the sample mean case, we use resampling with replacement from our observed data to obtain a standard error.
+
+How should I modify this?
+
+```{r, eval = FALSE}
+n_bootstrap <- 2e3
+bootstrap_means <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(my_sample, 
+                        size = length(my_sample), 
+                        replace = TRUE)
+  bootstrap_means[rep_id] <- mean(boot_sample) 
+}
+```
+
+. . . 
+
+```{r}
+n_bootstrap <- 2e3
+bootstrap_medians <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(my_sample, 
+                        size = length(my_sample), 
+                        replace = TRUE)
+  bootstrap_medians[rep_id] <- median(boot_sample) #median() instead of mean()
+}
+
+boot_se <- sd(bootstrap_medians)
+boot_se # \hat{SD(\hat \mu)}
+sample_median # \hat \mu
+```
+
+## Simulated distribution of sample median
+
+How much should we trust the standard error from bootstrap? 
+
+We can use simulation to approximate the theoretical standard error $SE[\hat \mu_{median}]$. 
+
+. . . 
+
+If our estimation $\widehat{SE}[\hat \mu_{median}]$ is close to it, we will believe bootstrap is applicable to sample median and probably be more confident when implementing it in practice.
+
+
+```{r}
+n_simulation <- 5e3
+simulation_medians <- numeric(n_simulation)
+
+for (rep_id in 1:n_simulation) {
+  simu_sample <- rchisq(sample_size,
+                        df = chisq_df) 
+  
+  simulation_medians[rep_id] <- median(simu_sample)
+}
+
+theoretical_se <- sd(simulation_medians)
+theoretical_se
+```
+
+What is `theoretical_se` in our mathematical notation?
+
+. . . 
+
+Let's compare the sample version quantities and the population version.
+
+$\mu, \hat\mu, {\rm SD}(\hat \mu), \widehat{\rm SD}(\hat \mu)$
+
+## Constructing a bootstrap confidence interval
+
+Once we have the bootstrap distribution of medians, we can also use its quantiles to form a confidence interval for the population median.
+
+::: {.columns}
+
+```{r}
+type_1_error <- 0.05
+lower_bound <- quantile(bootstrap_medians, 
+                        probs = type_1_error/2)
+higher_bound <- quantile(bootstrap_medians, 
+                         probs = 1 - type_1_error/2)
+```
+
+```{r, echo = FALSE}
+ggplot(tibble(bootstrap_medians = bootstrap_medians)) +
+  geom_histogram(aes(x = bootstrap_medians), 
+                 alpha = 0.7, fill = "#C9BF9D") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_vline(aes(xintercept = lower_bound),
+             color = "#047C91", linewidth = 1.5)+
+  geom_vline(aes(xintercept = higher_bound),
+             color = "#047C91", linewidth = 1.5)+
+  geom_vline(aes(xintercept = sample_median),
+             color = "#6D7D33", linewidth = 1.5)
+```
+
+:::
+
+
+The blue lines mark the lower and upper bounds (2.5% and 97.5%), and the green line marks our sample median.
+
+```{r}
+print(paste0("[",
+             formatC(lower_bound, format = "f", digits = 3), ", ",
+             formatC(higher_bound, format = "f", digits = 3), "]"))
+true_median
+```
+
+We can now also see whether the true median falls inside our bootstrap interval.
+
+## Confidence Intervals
+
+- A **confidence interval** is gives a range of plausible values for a population quantity, computed from our sample.
+
+- A **95% confidence interval** comes from a *procedure* that captures the true value in about 95% of samples.
+
+. . .
+
+- The true population quantity is a fixed (unknown) number. The interval is what's random: a different sample would give a different interval.
+
+- Our interval, [`r round(lower_bound, 2)`, `r round(higher_bound, 2)`], either contains the true median or it doesn't. In practice, we never get to know which.
+
+. . .
+
+- "95%" describes the **method's track record**. The `0.05` in our code (often called $\alpha$) is the fraction of time we expect that our procedure will fail (not cover the true value), and the confidence level is $1 - \alpha$ = 95%.
+
+## What does "95% confidence" mean?
+
+Like the sampling distribution, it's a counterfactual: imagine repeating the **entire study** many times.
+
+Our $\chi^2$ population is simulated, so here we actually can. Each repetition draws a new sample, bootstraps it, and builds a 95% interval:
+
+```{r}
+set.seed(2026)
+n_studies <- 500
+n_boot_ci <- 1e3
+ci_lower <- numeric(n_studies)
+ci_upper <- numeric(n_studies)
+study_median <- numeric(n_studies)
+
+for (study_id in 1:n_studies) {
+  new_sample <- rchisq(sample_size, df = chisq_df) # a brand new study
+  # replicate() repeats the bootstrap step n_boot_ci times
+  boot_medians <- replicate(n_boot_ci,
+                            median(sample(new_sample, replace = TRUE)))
+  study_median[study_id] <- median(new_sample)
+  ci_lower[study_id] <- quantile(boot_medians, probs = 0.025)
+  ci_upper[study_id] <- quantile(boot_medians, probs = 0.975)
+}
+```
+
+. . .
+
+What fraction of the intervals contain the true median?
+
+```{r}
+covers <- ci_lower <= true_median & true_median <= ci_upper
+mean(covers)
+```
+
+## 100 studies, 100 intervals
+
+```{r, echo = FALSE}
+#| fig-width: 10
+#| fig-height: 7
+coverage_df <- tibble(
+  study_id = 1:100,
+  lower = ci_lower[1:100],
+  upper = ci_upper[1:100],
+  estimate = study_median[1:100],
+  result = if_else(covers[1:100], "contains true median", "misses true median")
+)
+n_miss <- sum(!covers[1:100])
+
+ggplot(coverage_df, aes(y = study_id)) +
+  geom_vline(xintercept = true_median, linetype = "dashed", linewidth = 1) +
+  geom_segment(aes(x = lower, xend = upper, yend = study_id,
+                   color = result, linewidth = result)) +
+  geom_point(aes(x = estimate, color = result), size = 1.5) +
+  annotate("text", x = true_median + 0.015, y = 104, hjust = 0,
+           label = "true median", size = 5) +
+  scale_color_manual(values = c("contains true median" = "#047C91",
+                                "misses true median" = "#D55E00")) +
+  scale_linewidth_manual(values = c("contains true median" = 0.6,
+                                    "misses true median" = 1.4),
+                         guide = "none") +
+  labs(title = paste(n_miss, "of 100 intervals miss the true median"),
+       x = "median", y = "study", color = NULL) +
+  theme_minimal(base_size = 16) +
+  theme(legend.position = "top")
+```
+
+## Incorrect interpretations
+
+**Incorrect:** "There is a 95% probability that the true median is between `r round(lower_bound, 2)` and `r round(higher_bound, 2)`."
+
+Once computed, our interval is fixed, and so is the true median. Either it's inside or it isn't; we just don't know which. (Bayesian statistics, PSTAT 115, *does* make probability statements like this, using a different framework.)
+
+. . .
+
+**Incorrect:** "95% of the data fall inside the interval."
+
+The interval is about the population **median**, not about individual values:
+
+```{r}
+mean(my_sample >= lower_bound & my_sample <= higher_bound) # fraction of our data inside the CI
+```
+
+. . .
+
+**Correct:** "If we repeated the study many times, about 95% of the intervals built this way would contain the true median."
+
+**Correct (informal):** "We are 95% confident that the population median is between `r round(lower_bound, 2)` and `r round(higher_bound, 2)`." Here "confident" refers to the method's track record.
+
+## Confidence level vs. width
+
+All of these come from the **same** bootstrap distribution of medians. Only the quantiles change:
+
+```{r}
+conf_levels <- c(0.50, 0.80, 0.90, 0.95, 0.99)
+
+tibble(confidence = conf_levels,
+       lower = quantile(bootstrap_medians, probs = (1 - conf_levels) / 2),
+       upper = quantile(bootstrap_medians, probs = 1 - (1 - conf_levels) / 2)) |>
+  mutate(width = upper - lower,
+         contains_truth = lower <= true_median & true_median <= upper)
+```
+
+. . .
+
+- Higher confidence means a wider interval. A 100% interval for this median would be $[0, \infty)$: always right, never useful.
+- Lower confidence means a narrower interval that misses more often. Our 50% interval misses the true median.
+- To get a narrow interval *and* high confidence, collect more data: the standard error shrinks as $n$ grows.
+
+95% is a convention, not a law of nature.
+
+## Break: using resampling to estimate e
+
+Suppose you collected $n$ data points, and you are creating a bootstrap sample by SRS with replacement.
+
+. . .
+
+What is the probability that the first data point is not selected into the bootstrap sample?
+
+. . . 
+
+There are $n$ draws. The probability that data point 1 is not drawn is
+
+$$
+(1-1/n)^n.
+$$
+And we know that
+
+$$
+\lim_{n\rightarrow \infty} (1-1/n)^n = e^{-1}.
+$$
+
+So, for large $n$, the probability of being absent is about $e^{-1}$, and therefore $e \approx 1/\Pr(\text{data point 1 is absent from the bootstrap sample}).$
+
+## 
+
+```{r}
+set.seed(2)
+sample_size <- 2e3
+sample_index <- 1:sample_size
+
+boot_num <- 1e4
+absent_1 <- numeric(boot_num)
+
+for (repeat_index in 1:boot_num) {
+  boot_idx <- sample(sample_index, 
+                     sample_size,
+                     replace = TRUE)
+  absent_1[repeat_index] <- !(1 %in% boot_idx)
+}
+
+p_hat <- mean(absent_1) #probability of data 1 not in the bootstrap sample
+e_hat <- 1 / p_hat
+
+tibble(
+  true_e = exp(1),
+  estimated_e = e_hat,
+  error = abs(true_e - estimated_e)
+) |> glimpse()
+
+```
+
+# Case study: hawks revisited
+
+## Recall: a biased sample of hawks
+
+In the sampling lecture we simulated a population of 500 red-tailed hawks: 250 females (about 57.5 cm long on average) and 250 males (about 50.5 cm).
+
+Lengths came from dead specimens, and females were **9 times as likely** to be sampled as males.
+
+- The **sample mean** was biased upward: too many long females.
+- **Inverse probability weighting (IPW)** removed the bias by giving each hawk the weight $w_i = 1/p_i$:
+
+$$
+\hat \mu_{IPW} = \frac{\sum_i w_i Y_i}{\sum_i w_i}
+$$
+
+. . .
+
+We also saw that IPW has a **larger variance** than the sample mean. But we learned that by drawing 1000 new samples from the full population, which we can't do in practice.
+
+. . .
+
+**Question:** with only *one* sample of 50 hawks, what is the standard error of $\hat \mu_{IPW}$?
+
+There is no simple formula like ${\rm Var}(\hat\mu) = n^{-1}{\rm Var}(Y_1)$, because the weights make the math messy. Let's bootstrap it.
+
+## Our one biased sample
+
+We use the same `hawk_pop` from the recap, and draw the same biased sample of 50 hawks as in the sampling lecture (same seed).
+
+```{r}
+hawk_pop_wt <- hawk_pop |>
+  mutate(samp_weight = if_else(sex == "female", 9, 1))
+
+set.seed(8888)
+biased_n <- 50
+samp <- hawk_pop_wt |> slice_sample(n = biased_n, weight_by = samp_weight)
+samp |> count(sex)
+```
+
+. . .
+
+We wrap the IPW estimate in a function so we can reuse it:
+
+```{r}
+ipw_mean <- function(lengths, samp_weights) {
+  w <- 1 / samp_weights
+  sum(w * lengths) / sum(w)
+}
+
+naive_est <- mean(samp$length)
+ipw_est <- ipw_mean(samp$length, samp$samp_weight)
+c(sample_mean = naive_est, ipw = ipw_est)
+```
+
+## One bootstrap sample of hawks
+
+Resample **hawks** (whole rows of `samp`) with replacement, not just their lengths. Each resampled hawk brings its sex and its sampling weight along.
+
+```{r}
+set.seed(100)
+boot_hawks <- samp |> slice_sample(n = nrow(samp), replace = TRUE)
+boot_hawks |> count(sex)
+ipw_mean(boot_hawks$length, boot_hawks$samp_weight)
+```
+
+The number of males changes from one bootstrap sample to the next, just as it would across real samples.
+
+. . .
+
+Notice there is no `weight_by = samp_weight` in the resampling step. Why not?
+
+. . .
+
+Our sample came from the biased design, so it already over-represents females. Resampling it uniformly mimics drawing new samples under that same design. Adding `weight_by` would favor females a second time.
+
+The weights belong only inside the statistic, `ipw_mean()`.
+
+## The complete bootstrap
+
+Repeat 2000 times, computing both estimators on every bootstrap sample:
+
+```{r}
+n_bootstrap <- 2e3
+boot_naive <- numeric(n_bootstrap)
+boot_ipw <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_hawks <- samp |> slice_sample(n = nrow(samp), replace = TRUE)
+  boot_naive[rep_id] <- mean(boot_hawks$length)
+  boot_ipw[rep_id] <- ipw_mean(boot_hawks$length, boot_hawks$samp_weight)
+}
+
+sd(boot_naive) # bootstrap SE of the sample mean
+sd(boot_ipw)   # bootstrap SE of the IPW estimate
+```
+
+. . .
+
+We report: IPW estimate `r round(ipw_est, 2)` cm, with bootstrap standard error `r round(sd(boot_ipw), 2)` cm.
+
+From one sample, the bootstrap reaches the conclusion that needed the whole population in the sampling lecture: the IPW estimate is about twice as variable as the sample mean.
+
+## Did the bootstrap get it right?
+
+We simulated the population, so we can check. Here is the simulation from the sampling lecture: draw 1000 new biased samples from the **whole population** (impossible in practice).
+
+```{r}
+set.seed(40221)
+n_simulation <- 1e3
+simulation_naive <- numeric(n_simulation)
+simulation_ipw <- numeric(n_simulation)
+
+for (rep_id in 1:n_simulation) {
+  simu_hawks <- hawk_pop_wt |>
+    slice_sample(n = biased_n, weight_by = samp_weight)
+  simulation_naive[rep_id] <- mean(simu_hawks$length)
+  simulation_ipw[rep_id] <- ipw_mean(simu_hawks$length, simu_hawks$samp_weight)
+}
+```
+
+. . .
+
+```{r}
+tibble(estimator = c("sample mean", "IPW"),
+       simulated_se = c(sd(simulation_naive), sd(simulation_ipw)), # needs the population
+       bootstrap_se = c(sd(boot_naive), sd(boot_ipw)))             # needs only our sample
+```
+
+The bootstrap standard errors are close to the simulated ones for both estimators.
+
+## The bootstrap sees variability, not bias
+
+We compare centered distributions: bootstrap estimates minus our estimate, versus simulated estimates minus the true mean.
+
+```{r, echo = FALSE}
+#| fig-width: 10
+#| fig-height: 6
+type_labels <- c("simulation\n(estimate - true mean)",
+                 "bootstrap\n(boot. estimate - our estimate)")
+
+df_centered <- tibble(
+  value = c(simulation_naive - population_mean, boot_naive - naive_est,
+            simulation_ipw - population_mean, boot_ipw - ipw_est),
+  estimator = rep(c("sample mean", "IPW"),
+                  times = c(n_simulation + n_bootstrap, n_simulation + n_bootstrap)),
+  type = rep(rep(type_labels, 2),
+             times = c(n_simulation, n_bootstrap, n_simulation, n_bootstrap))
+) |>
+  mutate(estimator = factor(estimator, levels = c("sample mean", "IPW")))
+
+ggplot(df_centered, aes(x = value, y = type, fill = type)) +
+  geom_density_ridges(alpha = 0.7, scale = 1.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  facet_wrap(~ estimator, ncol = 1) +
+  scale_fill_manual(values = c("#D9A43B", "#047C91")) +
+  labs(x = "difference (cm)", y = NULL) +
+  theme_minimal(base_size = 16) +
+  theme(legend.position = "none",
+        strip.text = element_text(size = 16, face = "bold"))
+```
+
+- **IPW:** the two distributions line up. The bootstrap captures the spread.
+- **Sample mean:** the spreads match, but the simulated distribution sits about 2.5 cm to the right. That shift is the bias, and the bootstrap cannot see it.
+
+. . .
+
+Why? The bootstrap treats our sample as if it were the population. Every bootstrap sample has the same female-heavy mix, so the bootstrap sample means scatter around *our* sample mean, not around the true mean.
+
+## Bootstrap confidence intervals
+
+Percentile intervals, as we did for the median:
+
+```{r}
+ci_naive <- quantile(boot_naive, probs = c(0.025, 0.975))
+ci_ipw <- quantile(boot_ipw, probs = c(0.025, 0.975))
+ci_naive
+ci_ipw
+population_mean # known only because we simulated the population
+```
+
+```{r, echo = FALSE}
+#| fig-width: 10
+#| fig-height: 6
+estimator_levels <- c("sample mean", "IPW")
+
+boot_df <- tibble(
+  estimate = c(boot_naive, boot_ipw),
+  estimator = factor(rep(estimator_levels, each = n_bootstrap),
+                     levels = estimator_levels)
+)
+
+ci_df <- tibble(
+  estimator = factor(estimator_levels, levels = estimator_levels),
+  lower = c(ci_naive[1], ci_ipw[1]),
+  upper = c(ci_naive[2], ci_ipw[2]),
+  estimate = c(naive_est, ipw_est)
+)
+
+ggplot(boot_df) +
+  geom_histogram(aes(x = estimate), binwidth = 0.2,
+                 fill = "#C9BF9D", color = "white") +
+  geom_vline(data = ci_df, aes(xintercept = lower),
+             color = "#047C91", linewidth = 1.5) +
+  geom_vline(data = ci_df, aes(xintercept = upper),
+             color = "#047C91", linewidth = 1.5) +
+  geom_vline(data = ci_df, aes(xintercept = estimate),
+             color = "#6D7D33", linewidth = 1.5) +
+  geom_vline(xintercept = population_mean,
+             linetype = "dashed", linewidth = 1) +
+  annotate("text", x = population_mean - 0.15, y = Inf,
+           vjust = 1.5, hjust = 1, label = "true mean", size = 5) +
+  facet_wrap(~ estimator, ncol = 1) +
+  labs(x = "bootstrap estimate of mean length (cm)", y = "count") +
+  theme_minimal(base_size = 16) +
+  theme(strip.text = element_text(size = 16, face = "bold"))
+```
+
+Blue lines: 2.5% and 97.5% bounds. Green line: our estimate. Dashed line: true mean.
+
+. . .
+
+The sample-mean interval is narrow and *confidently wrong*: it misses the true mean entirely. The IPW interval is wider, but it covers the truth.
+
+## A common mistake: resampling only the lengths
+
+What goes wrong in this version?
+
+```{r}
+set.seed(100)
+boot_ipw_wrong <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_lengths <- sample(samp$length, replace = TRUE)
+  boot_ipw_wrong[rep_id] <- ipw_mean(boot_lengths, samp$samp_weight) # weights stay put!
+}
+```
+
+. . .
+
+```{r}
+c(center = mean(boot_ipw_wrong), se = sd(boot_ipw_wrong))
+c(ipw_est = ipw_est, naive_est = naive_est, correct_boot_se = sd(boot_ipw))
+```
+
+The lengths get separated from their hawks, so a long female length can land in a male's slot and receive a male's large weight. The weights no longer correct anything. The bootstrap distribution centers on the biased sample mean instead of our IPW estimate, and its standard error is off too.
+
+. . .
+
+**Rule:** resample whole units (rows), so every variable that belongs to a hawk stays with that hawk.
+
+## Takeaways: bootstrapping the IPW estimate
+
+- The bootstrap gave a standard error for $\hat\mu_{IPW}$ with **no formula**. We just recomputed the statistic on each bootstrap sample.
+
+. . .
+
+- **Resample whole hawks, uniformly.** The sample already reflects the biased design. The weights are used only to compute the statistic.
+
+. . .
+
+- The bootstrap measures **variance, not bias**. It cannot fix a biased estimator. Fix the bias with the estimator (here, IPW), then use the bootstrap to measure what that correction costs in variance.
+
+
