@@ -1,0 +1,611 @@
+---
+ title: "Randomized Responses and Data Privacy"
+ format:
+   revealjs:
+     theme: default
+     slide-number: true
+     preview-links: auto
+     html-math-method: mathjax
+     scrollable: true
+     width: 1280
+     embed-resources: true
+ execute:
+   eval: true
+   echo: true
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+set.seed(3)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(ggridges)
+
+# p = probability of answering truthfully. Set it to the value the class
+# chooses (between 0.5 and 1, in hundredths), then re-render.
+p <- 0.7
+stopifnot(p > 0.5, p <= 1)
+# range for the phone random number generator on the class survey slide
+rng_max <- if (isTRUE(all.equal(10 * p, round(10 * p)))) 10 else 100
+```
+
+# Why privacy matters
+
+## What counts as personal data?
+
+California's **Consumer Privacy Act** (CCPA) protects *personal information*: anything that identifies you, or could reasonably be linked to you.
+
+ - Name, email address, IP address
+ - Purchase and browsing history
+ - Location and employment data
+ - *Sensitive* information: health, finances, race, religion, sexual orientation, ...
+
+. . .
+
+How much data has been collected about you since you woke up this morning?
+
+## What counts as personal data?
+
+The U.S. has no single federal privacy law. Instead there is a patchwork:
+
+ - laws by sector: **HIPAA** (health records), **FERPA** (your student records and grades at UCSB)
+ - laws by state: CCPA in California
+ - the EU's **GDPR**, which applies to data on anyone in the EU
+
+## What counts as personal data?
+
+As data scientists, you will often hold this kind of data about *other people*.
+
+
+
+## Case study: Target-ed Advertising
+
+**Target (2012):** A model predicted which customers were pregnant from purchases like unscented lotion and vitamin supplements, and Target then mailed them coupons for baby products.
+
+. . .
+
+According to the *New York Times* (Duhigg, 2012), a father complained to a store manager about baby coupons mailed to his teenage daughter, and later learned that she was pregnant.
+
+. . .
+
+Nobody ever told Target they were pregnant. They used models to infer sensitive information from data that seemed harmless.
+
+Privacy is not only about what we collect. It is also about what can be learned from what we collect.
+
+## Principles for handling personal data {.smaller}
+
+The OECD privacy principles are among the most widely adopted guidelines, including by U.S. government agencies:
+
+| Principle | In plain language |
+|---|---|
+| Collection limitation | Collect only what you need, lawfully, with consent where appropriate |
+| Data quality | Keep data relevant, accurate, and up to date |
+| Purpose specification | Say *why* you are collecting data before you collect it |
+| Use limitation | Don't use it for other purposes without consent or legal authority |
+| Security safeguards | Protect it from loss and unauthorized access |
+| Openness | Be open about what you collect and how you use it |
+| Individual participation | People can see, and correct, the data about them |
+| Accountability | Whoever controls the data is responsible for following these principles |
+
+: {tbl-colwidths="[28,72]"}
+
+. . .
+
+These principles can be enforced. In 2024 the Dutch Data Protection Authority fined **Uber €290 million** for transferring European drivers' personal data to the U.S. without adequate safeguards.
+
+## Case study: predicting suicide risk
+
+In 2017, Meta (then Facebook) announced that it analyzes posts and comments to flag users at risk of suicide. It later said that it uses these predictions to notify local authorities, and that over 100 wellness checks had been carried out by first responders. In 2018, Meta revealed that it also scans users' private messages for suicide risk.
+
+. . .
+
+ - This program may have saved lives. What privacy concerns does it raise?
+ - What happens when the model is wrong (a false positive)?
+
+::: {.notes}
+Points to draw out: consent (users never opted in), purpose specification and use limitation (posts written for friends, used for risk prediction), openness (no public information about accuracy), and the harm of false positives (a police visit). Weigh these against the potential benefit.
+:::
+
+## Anonymization is hard!
+
+** Sweeney (2000):** ZIP code, birth date, and sex together uniquely identify about **87%** of Americans. Using a public voter list, she found the Massachusetts governor's medical records in a hospital data set that had been released as "anonymous."
+
+. . .
+
+**Netflix Prize (2006):** Netflix released "anonymous" movie ratings for a competition. Researchers matched some of the records to public IMDb reviews, revealing who had rated what (Narayanan & Shmatikov, 2008).
+
+. . .
+
+Even in this room:
+
+_"Who is the male in this classroom with white hair in his beard?"_
+
+Certain combinations of attributes can still identify individuals. The more attributes we collect (age, ZIP code, IP address, ...), the easier it is.
+
+## Models can leak data too
+
+<center>![](figures/xkcd_predictive_models.png){width="35%"}</center>
+
+<center>[xkcd.com/2169](https://xkcd.com/2169)</center>
+
+Models trained on people's data (including large language models) can memorize parts of that data and repeat them.
+
+# Randomized response
+
+## Privacy is also a statistics problem
+
+In many data-collection settings or surveys, respondents may be unwilling to answer truthfully if a question feels sensitive, personal, or too revealing.
+
+Examples include studies on:
+
+ - Income and financial hardship
+ - Health-related behaviors
+ - Political preferences
+ - Illegal or stigmatized activities
+
+. . .
+
+Even in an anonymous survey, people may still worry:
+
+_"What if they can trace this back to me?"_
+
+. . .
+
+If respondents do not feel safe, they lie or refuse to answer, and the data we collect will be **biased**. Protecting privacy is an ethical obligation, and it also leads to better data.
+
+## Randomized response
+
+To address these challenges, Warner (1965) proposed a procedure called **randomized response**.
+
+The person collecting the data can still draw reliable conclusions about the overall population,
+
+. . .
+
+but each individual's true answer is never recorded anywhere.
+
+. . .
+
+This is an extreme form of the *collection limitation* principle: we never collect the sensitive information at all.
+
+## The protocol
+
+Each respondent **secretly** makes a random draw:
+
+ - With probability $p$, they answer the question **truthfully**.
+ - With probability $1 - p$, they **flip** their answer (Yes becomes No, No becomes Yes).
+
+They report only their final Yes or No. They never reveal their random draw.
+
+. . .
+
+Today we will use $p = `r p`$: a **`r round(100 * (1 - p))`% flip rate**.
+
+Even if you report "Yes", no one can know whether that is your true answer or a flipped one.
+
+::: {.notes}
+Have the class choose $p$ (between 0.5 and 1, in hundredths). Set `p` in the setup chunk at the top of the file and re-render; every slide uses that value.
+:::
+
+<!-- ## How much does a "Yes" reveal?
+
+ - If your true answer is **Yes**, you report Yes with probability `r p`.
+ - If your true answer is **No**, you report Yes with probability `r 1 - p`.
+
+So a reported "Yes" is only $`r p` / `r 1 - p` = `r round(p / (1 - p), 2)`$ times as likely to come from a true Yes as from a true No.
+
+. . .
+
+Suppose your professor thinks 30% of students would truly answer Yes, and then sees your "Yes". How sure can they be that your true answer is Yes?
+
+```{r}
+prior <- 0.30   # professor's guess before seeing your answer
+                # p = probability of answering truthfully
+
+# P(true answer is Yes | reported Yes), by Bayes' rule
+prior * p / (prior * p + (1 - prior) * (1 - p))
+```
+
+Their certainty moves from 30% to about `r round(100 * prior * p / (prior * p + (1 - prior) * (1 - p)))`%. They still can't be sure, because any "Yes" could be a flipped answer. If we asked directly, it would move to 100%.
+
+. . .
+
+This ratio is exactly how **differential privacy** measures privacy loss: $\varepsilon = \log(`r p`/`r 1 - p`) \approx `r round(log(p / (1 - p)), 2)`$. A smaller $\varepsilon$ means stronger privacy. -->
+
+## Class survey {.smaller}
+
+**Have you ever lied to a professor about being sick or having a family emergency?** 
+
+**Step 1.** In private, make your random draw:
+
+```{r, eval = FALSE, code = c(sprintf('draw <- sample(c("truth", "flip"), size = 1, prob = c(%s, %s))', p, 1 - p), "draw")}
+```
+
+Search "random number generator" on your phone, and pick a number from 1 to `r rng_max`. Numbers 1–`r round(p * rng_max)` mean **truth** and numbers `r round(p * rng_max) + 1`–`r rng_max` mean **flip**.
+
+**Step 2.** If your draw says **truth**, answer the question truthfully. If it says **flip**, give the **opposite** of your true answer.
+
+**Step 3.** We'll count the number of reported Yes's and No's. Don't tell anyone what your random draw said.
+
+::: {.notes}
+Open the poll before this slide. Once responses are in, enter the counts in the `class-data` chunk (in "Our class results") and re-render, or run the code live.
+:::
+
+## Randomized response in the real world
+
+Randomized response was proposed by Warner (1965), long before the modern mathematical formalization of privacy: **differential privacy** (Dwork et al., 2006).
+
+. . .
+
+It has had a lasting impact:
+
+ - **Google (2014):** RAPPOR used randomized response to collect statistics about Chrome users' settings, without learning any individual user's settings.
+ - **Apple (2016–):** uses similar techniques to learn which emoji and new words are popular on iPhones.
+ - **U.S. Census Bureau (2020):** after showing that published 2010 Census tables could be used to reconstruct individual records, it switched to differential privacy.
+
+<center>![](figures/paper_title.png){width="55%"}</center>
+<center>![](figures/bloom_filter.png){width="55%"}</center>
+
+# From reported answers to an estimate
+
+## Two ways to report "Yes"
+
+Let
+
+ - $r$ = proportion of students whose **true** answer is Yes (what we want to know)
+ - $p = `r p`$ = probability of answering truthfully
+
+. . .
+
+A student reports Yes in one of two ways:
+
+ - their true answer is Yes **and** the randomization says *truth*: probability $r \times p$
+ - their true answer is No **and** the randomization response says *flip*: probability $(1 - r) \times (1 - p)$
+
+We can multiply because the random draw is independent of the student's true answer. So
+
+$$
+P(\text{report Yes}) = rp + (1-r)(1-p)
+$$
+
+There are two sources of randomness: sampling variability (from who is in the class) and the **random draws**.
+
+## Solving for $r$
+
+Solving for $r$:
+
+$$
+r = \frac{P(\text{report Yes}) - (1-p)}{2p - 1}
+$$
+
+. . .
+
+With $p = `r p`$: $\quad r = \dfrac{P(\text{report Yes}) - `r 1 - p`}{`r 2 * p - 1`} = `r round(1 / (2 * p - 1), 2)` \times P(\text{report Yes}) - `r round((1 - p) / (2 * p - 1), 2)`$
+
+We estimate $P(\text{report Yes})$ with the sample proportion, which gives
+
+$$
+\hat r = `r round(1 / (2 * p - 1), 2)` \times \frac{\#\text{ reporting Yes}}{n} - `r round((1 - p) / (2 * p - 1), 2)`
+$$
+
+. . .
+
+A sanity check:
+
+```{r}
+reported_yes_rate <- function(r, p) r * p + (1 - r) * (1 - p)
+reported_yes_rate(r = c(0, 0.5, 1), p = p)
+```
+
+Even if *nobody* has lied, we expect `r round(100 * (1 - p))`% Yes, and even if *everyone* has lied, we expect only `r round(100 * p)`% Yes.
+
+# Our class results
+
+## The data
+
+```{r class-data}
+# enter today's poll counts here
+n_yes <- 24
+n_no  <- 16
+
+reports <- c(rep(1, n_yes), rep(0, n_no))   # 1 = reported "Yes"
+n <- length(reports)
+n
+```
+
+We only know the reported answers of all students not the true answers.
+
+## Naive and corrected estimates
+
+The naive proportion of "Yes" is **not** an estimate of how many students have lied:
+
+```{r}
+yes_prop <- mean(reports)
+yes_prop
+```
+
+. . .
+
+We need to correct it using the randomized-response design:
+
+```{r}
+rr_estimate <- function(reports, p) {
+  min(max((mean(reports) - (1 - p)) / (2 * p - 1), 0), 1)   # clip to [0, 1]
+}
+
+r_hat <- rr_estimate(reports, p)
+r_hat
+```
+
+. . .
+
+With a small sample, $\hat r$ can fall outside $[0, 1]$. Since it estimates a proportion, we clip it to the interval:
+
+```{r}
+r_hat_clipped <- min(max(r_hat, 0), 1)
+r_hat_clipped
+```
+
+Our estimate: about **`r round(100 * r_hat_clipped)`%** of the class has lied to a professor about being sick or having a family emergency.
+
+How confident should we be in this number?
+
+# Bootstrapping our estimate
+
+## One bootstrap sample
+
+We have one sample of `r n` reported answers. To estimate the variability of $\hat r$, we **resample with replacement** from those reports:
+
+```{r}
+boot_sample <- sample(reports,
+                      size = length(reports),
+                      replace = TRUE)   # one bootstrap sample
+mean(boot_sample)                       # its proportion of "Yes"
+rr_estimate(boot_sample, p)             # its estimate of r
+```
+
+
+## The complete bootstrap
+
+```{r}
+n_bootstrap <- 2e3
+bootstrap_r_hats <- numeric(n_bootstrap)
+
+for (rep_id in 1:n_bootstrap) {
+  boot_sample <- sample(reports,
+                        size = length(reports),
+                        replace = TRUE)
+  bootstrap_r_hats[rep_id] <- rr_estimate(boot_sample, p)
+}
+
+boot_se <- sd(bootstrap_r_hats)
+boot_se
+```
+
+The bootstrap standard error of $\hat r$ is about **`r round(boot_se, 2)`**.
+
+. . .
+
+Compare this with the standard error of the reported Yes proportion:
+
+```{r}
+sd(bootstrap_r_hats)   # undo the factor of 1 / (2p - 1)
+sqrt(yes_prop * (1 - yes_prop) / n)
+```
+
+The privacy protection makes our estimate **`r round(boot_se / sqrt(yes_prop * (1 - yes_prop) / n), 1)` times noisier** than the reported Yes proportion it is based on.
+
+## A 95% bootstrap confidence interval {.smaller}
+
+:::: {.columns}
+
+::: {.column width="50%"}
+```{r}
+lower_bound <- quantile(bootstrap_r_hats, 0.025)
+higher_bound <- quantile(bootstrap_r_hats, 0.975)
+
+# a proportion must lie in [0, 1], so clip
+ci <- c(max(lower_bound, 0), min(higher_bound, 1))
+round(ci, 2)
+```
+:::
+
+::: {.column width="50%"}
+```{r, echo = FALSE}
+#| fig-width: 6.5
+#| fig-height: 4.5
+ggplot(tibble(bootstrap_r_hats = bootstrap_r_hats)) +
+  annotate("rect", xmin = -Inf, xmax = 0, ymin = -Inf, ymax = Inf,
+           fill = "grey60", alpha = 0.25) +
+  annotate("rect", xmin = 1, xmax = Inf, ymin = -Inf, ymax = Inf,
+           fill = "grey60", alpha = 0.25) +
+  geom_histogram(aes(x = bootstrap_r_hats),
+                 binwidth = 1 / (n * (2 * p - 1)), center = r_hat,
+                 alpha = 0.7, fill = "#C9BF9D") +
+  geom_vline(xintercept = lower_bound, color = "#047C91", linewidth = 1.5) +
+  geom_vline(xintercept = higher_bound, color = "#047C91", linewidth = 1.5) +
+  geom_vline(xintercept = r_hat, color = "#6D7D33", linewidth = 1.5) +
+  labs(x = "bootstrap estimates of r", y = "count") +
+  theme_minimal()
+```
+:::
+
+::::
+
+The blue lines mark the 2.5% and 97.5% quantiles of the bootstrap estimates, and the green line marks our estimate $\hat r$. The gray regions are values outside $[0, 1]$ that are impossible for a proportion.
+
+. . .
+
+**Our 95% confidence interval for the proportion of students who have lied: [`r round(ci[1], 2)`, `r round(ci[2], 2)`].**
+
+That interval is wide. It is the price of protecting everyone's privacy.
+
+## The value of the bootstrap
+
+The bootstrap reflects variability from:
+
+ - which students happened to be in class today (sampling)
+ - the random draws, because each reported answer already includes its own random draw
+
+## What the bootstrap can't help with
+
+Reminder: the bootstrap does not reflect bias. 
+
+ - Our class is not a random sample of UCSB students, let alone all college students.
+ - Some students might have skipped the poll (nonresponse).
+ - Some students may not have followed the protocol, e.g., answering "No" regardless of their draw to be extra safe.
+ - Students may interpret "lied" or "family emergency" differently.
+
+
+# How well does randomized response work?
+
+## A simulation
+
+In real life we never learn the true answers. With a simulation, we can create a hypothetical population where we know the truth: 20,000 students, 40% of whom have lied.
+
+```{r}
+pop_size <- 20000
+true_rate <- 0.4
+student_pop <- tibble(ID = 1:pop_size,
+                      has_lied = rbinom(pop_size, 1, true_rate))
+mean(student_pop$has_lied)
+```
+
+. . .
+
+One randomized-response survey of a class of $n$ students:
+
+```{r}
+one_rr_survey <- function(pop, n, p = p) {
+  truth  <- sample(pop$has_lied, size = n)      # who is in class
+  draw   <- rbinom(n, 1, p)                     # 1 = truth, 0 = flip
+  report <- ifelse(draw == 1, truth, 1 - truth) # all we ever see
+  rr_estimate(report, p)
+}
+
+one_rr_survey(student_pop, n = n, p = p)
+```
+
+## Repeating the survey many times
+
+We repeat the survey for a class the same size as ours ($n$ = `r n`):
+
+```{r}
+n_sim <- 2e3
+# replicate() repeats the survey n_sim times
+sim_r_hats <- replicate(n_sim, one_rr_survey(student_pop, n = n, p = p))
+
+mean(sim_r_hats)   # close to true_rate = 0.4: no systematic bias
+sd(sim_r_hats)     # the true standard error of r_hat
+boot_se            # our bootstrap estimate from one class
+```
+
+. . .
+
+ - On average, $\hat r$ is centered at the truth, so the estimator appears unbiased.
+ - The bootstrap SE from our single class is close to the true standard error. The bootstrap gets the uncertainty right without knowing the population.
+
+# The privacy–accuracy trade-off
+
+## Choosing the flip rate
+
+Does a larger $p$ increase or decrease privacy protection? What about accuracy?
+
+. . .
+
+```{r}
+simulate_tradeoff <- function(n, p_values = sort(unique(c(p, 0.6, 0.75, 0.9, 1)))) {
+  results <- tibble()
+  for (p_val in p_values) {
+    r_hats <- replicate(n_sim, one_rr_survey(student_pop, n = n, p = p_val))
+    results <- bind_rows(results, tibble(p = p_val, r_hat = r_hats))
+  }
+  results
+}
+
+tradeoff_class <- simulate_tradeoff(n = n)
+
+tradeoff_class |>
+  group_by(p) |>
+  summarize(sd_r_hat = sd(r_hat)) |>   # accuracy: standard error of r_hat
+  mutate(yes_ratio = p / (1 - p))      # privacy: how much a "Yes" reveals
+```
+
+`yes_ratio` is how many times more likely a reported "Yes" is to come from a true Yes. When $p = 1$, we are asking directly, and there is no privacy.
+
+## Choosing the flip rate
+
+```{r, echo = FALSE}
+#| fig-width: 12
+#| fig-height: 4
+#| out-width: "90%"
+plot_tradeoff <- function(results, title) {
+  # stat = "density" picks a separate bandwidth for each ridge
+  ggplot(results, aes(x = r_hat, y = factor(p), fill = factor(p),
+                      height = after_stat(density))) +
+    geom_density_ridges(stat = "density", alpha = 0.8, scale = 1.2) +
+    geom_vline(xintercept = true_rate, linetype = "dashed") +
+    scale_fill_viridis_d() +
+    coord_cartesian(xlim = c(-0.6, 1.4)) +
+    labs(x = "estimate of r", y = "p = P(answer truthfully)",
+         title = title) +
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "none")
+}
+
+plot_tradeoff(tradeoff_class, paste0("class of n = ", n, " (true rate dashed)"))
+```
+
+A $p$ close to 0.5 gives the strongest privacy, but the estimator has very high variance. Asking directly ($p = 1$) gives the most accurate estimate, but only if people answer honestly!
+
+## Increasing the sample size
+
+```{r}
+tradeoff_1000 <- simulate_tradeoff(n = 1000)
+```
+
+```{r, echo = FALSE}
+#| fig-width: 12
+#| fig-height: 4
+#| out-width: "90%"
+plot_tradeoff(tradeoff_1000, "n = 1000 (true rate dashed)")
+```
+
+With $n = 1000$, the `r round(100 * (1 - p))`% flip rate gives a standard error of about `r round(sd(filter(tradeoff_1000, p == .env$p)$r_hat), 2)`.
+
+Organizations that automatically collect millions of responses, like Google and Apple, can offer strong privacy protection while still drawing precise conclusions.
+
+## Theoretical properties of randomized response
+
+The randomized-response estimator is unbiased:
+
+$$
+\begin{aligned}
+E[\hat r] &= \frac{1}{2p - 1} \left( E\left[\frac{\#\text{ reporting Yes}}{n}\right] - (1-p) \right) \\
+&= \frac{1}{2p - 1} \left( P(\text{report Yes}) - (1-p) \right) \\
+&= \frac{1}{2p - 1} \left( rp + (1-r)(1-p) - (1-p) \right) \\
+&= \frac{1}{2p - 1} \cdot r(2p - 1) \\
+&= r
+\end{aligned}
+$$
+
+On average, $\hat r$ equals $r$, the true proportion of Yes answers.
+
+The variance of the randomized response estimator is:
+
+$$
+\begin{aligned}
+Var(\hat r) &= \frac{1}{(2p - 1)^2} Var(\frac{\#\text{ reporting Yes}}{n}) \\
+&= \frac{1}{(2p - 1)^2} \frac{P(\text{report Yes}) (1 - P(\text{report Yes}))}{n}
+\end{aligned}
+$$
+
+
+## Takeaways
+
+ - Violating privacy can cause harm.  There are tools for respecting privacy while maintaining statistical validity, e.g randomized response.
+ - Simply removing names is not sufficient for ensuring privacy.
+ - The estimator $\hat r = \dfrac{\hat P(\text{report Yes}) - (1-p)}{2p - 1}$ is unbiased, but the the randomization in the response inflates the standard error.
+ 
+ - Tradeoff: more privacy means more statistical uncertainty.
