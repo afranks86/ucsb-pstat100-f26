@@ -1,0 +1,395 @@
+---
+title: "Homework 4"
+author: "Your Name Here"
+format: pdf
+execute:
+  echo: true
+  eval: true
+  message: false
+---
+
+```{r, echo=FALSE, message=FALSE, eval=TRUE}
+library(tidyverse)
+library(broom)
+```
+
+This assignment uses the `broom` package, which is installed along with the tidyverse. If it is missing, run `install.packages("broom")` in the console before rendering.
+
+# Background: California Department of Developmental Services
+
+From Taylor, S. A., & Mickel, A. E. (2014). Simpson's Paradox: A Data Set and Discrimination Case Study Exercise. Journal of Statistics Education, 22(1):
+
+> Most states in the USA provide services and support to individuals with developmental disabilities (e.g., intellectual disability, cerebral palsy, autism, etc.) and their families. The agency through which the State of California serves the developmentally-disabled population is the California Department of Developmental Services (DDS) ... One of the responsibilities of DDS is to allocate funds that support over 250,000 developmentally-disabled residents. A number of years ago, an allegation of discrimination was made and supported by a univariate analysis that examined average annual expenditures on consumers by ethnicity. The analysis revealed that the average annual expenditures on Hispanic consumers was approximately one-third of the average expenditures on White non-Hispanic consumers. This finding was the catalyst for further investigation; subsequently, state legislators and department managers sought consulting services from a statistician.
+
+In this assignment, you'll analyze the deidentified DDS data published with this article to answer the question: *is there evidence of ethnic or gender discrimination in allocation of DDS funds?* This will involve practicing the following:
+
+- exploratory data visualization
+
+- bootstrap confidence intervals and inverse probability weighting
+
+- regression analysis, with uncertainty from the paired bootstrap
+
+**Aside**: The JSE article focuses on [Simpson's paradox](https://en.wikipedia.org/wiki/Simpson%27s_paradox), in which a trend in aggregated data disappears or reverses within each of the groups that make up the data. We won't emphasize this topic in the assignment, although we will discuss it in class. As you work through the assignment, think about how these data illustrate Simpson's paradox.
+
+# DDS data
+
+The data for this assignment are already tidy, so in this section you'll just familiarize yourself with basic characteristics. The first few rows of the data are shown below:
+
+```{r, eval=TRUE, message=FALSE}
+dds <- read_csv('data/california-dds.csv')
+print(dds)
+```
+
+Take a moment to open and read the data documentation (*data > california-dds-documentation.md*).
+
+### Question 1: Data description
+
+Write a short paragraph answering the following questions based on the data documentation.
+
+- (i) Why were the data collected? What is the purpose of this dataset?
+
+- (ii) What are the observational units?
+
+- (iii) What is the population of interest?
+
+- (iv) How was the sample obtained (*e.g.* random sampling, administrative data, convenience sampling, etc.)?
+
+- (v) Can inferences about the population be drawn from the sample?
+
+In addition, make a table summarizing the variables measured. Use the format below.
+
+Name | Variable description | Type | Units of measurement
+---|---|---|---
+ID | Unique consumer identifier | Numeric | None
+
+_Type your answer here, replacing this text._
+
+# Exploratory analysis
+
+Here you'll use graphical and descriptive techniques to explore the allegation of discriminatory allocation of benefits.
+
+### Question 2: Alleged discrimination
+
+Construct a data frame showing the median expenditure for each ethnicity, along with the sample size for each ethnic group, sorted from the largest group to the smallest. Store it as `median_expend_by_eth`.
+
+In one or two sentences: how do the median expenditures for Hispanic and White non-Hispanic consumers compare, and which ethnic groups have very few consumers in the sample?
+
+```{r}
+median_expend_by_eth <- ...
+
+print(median_expend_by_eth, n = 15)
+```
+
+_Type your answer here, replacing this text._
+
+### Question 3: Plot median expenditures
+
+Construct a point-and-line plot of median expenditure (y) against ethnicity (x), with:
+
+- ethnicities sorted by descending median expenditure;
+
+- the median expenditure axis shown on the log scale;
+
+- the y-axis labeled 'Median expenditure'; and
+
+- no x-axis label (since the ethnicity group names are used to label the axis ticks, the label 'Ethnicity' is redundant).
+
+A point-and-line plot is a plot using both `geom_point` and `geom_line` with the same x and y aesthetics. (Hint: when x is categorical, `geom_line()` needs `aes(group = 1)` to connect the points.) Store the result as `fig_1` and display the plot.
+
+```{r}
+fig_1 <- ...
+
+print(fig_1)
+```
+
+### Question 4: Age and expenditure
+
+How does expenditure differ by age? Construct a scatterplot of expenditure (y) against age (x). Store the plot as `fig_2`. In one or two sentences, comment on the plot: what is the main pattern it reveals? *Hint:* consider transforming the y-axis to better visualize the results.
+
+```{r}
+fig_2 <- ...
+
+print(fig_2)
+```
+
+_Type your answer here, replacing this text._
+
+Precisely because recipients have different needs at different ages that translate to jumps in expenditure, age has been discretized into age cohorts defined based on need level. Going forward, we'll work with these age cohorts. By treating age as categorical, we don't need to model the jumps in the relationship between age and expenditure.
+
+The cohort labels are stored as `Age Cohort` in the dataset. The code below converts the categorical columns to factors (R's categorical type), puts the six cohorts in order of age, and prints the cohort levels.
+
+```{r, eval=TRUE}
+dds_cat <- dds |>
+  mutate(across(c(`Age Cohort`, Ethnicity, Gender), as.factor),
+         `Age Cohort` = fct_relevel(`Age Cohort`, "0 to 5", "6 to 12"))
+
+levels(dds_cat$`Age Cohort`)
+```
+
+Here is an explanation of how the cohort age boundaries were chosen:
+
+> The 0-5 cohort (preschool age) has the fewest needs and requires the least amount of funding. For the 6-12 cohort (elementary school age) and 13-17 (high school age), a number of needed services are provided by schools. The 18-21 cohort is typically in a transition phase as the consumers begin moving out from their parents’ homes into community centers or living on their own. The majority of those in the 22-50 cohort no longer live with their parents but may still receive some support from their family. Those in the 51+ cohort have the most needs and require the most amount of funding because they are living on their own or in community centers and often have no living parents.
+
+### Question 5: Age structure of the sample
+
+Here you'll explore the age composition of each ethnic group in the sample.
+
+- (i) Count the number of consumers in each combination of ethnicity and age cohort. Use `dds_cat` so that the order of age cohorts is preserved. Store the result as `samp_sizes`.
+
+- (ii) Construct a point-and-line plot of the sample size (y) against age cohort (x), with one line per ethnic group (mapped to color). Make sure the age cohorts appear in order on the x-axis. Store the plot as `fig_3` and display it.
+
+- (iii) Are there differences in age composition between ethnic groups? Then look at the `Multi Race` group: given what you saw in Question 4, why might the median expenditure for this group be lower than for the others? Answer in 2-3 sentences.
+
+```{r}
+samp_sizes <- ...
+
+fig_3 <- ...
+
+print(fig_3)
+```
+
+_Type your answer here, replacing this text._
+
+Age structure might explain the observed differences in median expenditure between ethnic groups, because:
+
+- (i) among the individuals in the sample, age distributions differ by ethnic group; and
+
+- (ii) age is strongly related to expenditure.
+
+In other words, age may be a **confounding variable**.
+
+### Question 6: Correcting for age
+
+The last few questions suggest that the apparent discrimination *could* simply be an artifact of the differing age structure. We can check this by plotting median expenditure against ethnicity, as in Question 3, but now separately for each age cohort.
+
+Construct a point-and-line chart based on `dds_cat` with:
+
+   - ethnicity on the x axis
+   - no x axis label
+   - median expenditure on the y axis
+   - the y axis displayed on the log scale
+   - age cohort mapped to color and sorted in order of age
+   - lines connecting points that display the median expenditure for each ethnicity and cohort, with one line per age cohort
+
+Store the result as `fig_4` and display the graphic. Then, in one sentence: comparing consumers *in the same age cohort*, how do median expenditures for Hispanic and White non-Hispanic consumers compare?
+
+```{r}
+fig_4 <- ...
+
+print(fig_4)
+```
+
+_Type your answer here, replacing this text._
+
+# Statistical inference: adjusting for age
+
+Our exploratory analysis revealed two key insights:
+
+1. There appear to be substantial differences in expenditures between ethnic groups.
+2. These differences might be explained by different age distributions across groups.
+
+However, these are patterns in one sample of 1,000 consumers. To draw conclusions about the *population* of DDS consumers, we need to (a) summarize the age-adjusted difference with a single number and (b) quantify its sampling variability. We'll do this two ways:
+
+1. **Inverse probability weighting (IPW)**, to compare average expenditures for minority and non-minority consumers after adjusting for age.
+
+2. **Regression**, to adjust for age and gender at the same time and to compare each ethnic group with White non-Hispanic consumers.
+
+In both cases, we'll use the bootstrap to quantify uncertainty. If both methods lead to similar conclusions, we can be more confident in them.
+
+### Question 7: The unadjusted difference
+
+We'll start by comparing minorities and non-minorities without any adjustment. Define "non-minority" as "White not Hispanic" and "minority" as all other ethnicities.
+
+- (i) Add a logical variable named `Minority` to `dds_cat` (`TRUE` for minority consumers).
+
+- (ii) Write a function, `compute_mean_diff`, that takes a data frame and returns the mean expenditure of minority consumers minus the mean expenditure of non-minority consumers (in dollars). Apply it to `dds_cat`.
+
+- (iii) Bootstrap this difference: resample whole rows (consumers) of `dds_cat` with replacement 1000 times, as in lecture, and apply `compute_mean_diff` to each bootstrap sample. Plot a histogram of the bootstrap distribution, and compute a 95% bootstrap percentile confidence interval.
+
+- (iv) Based on your interval, what range of values for the mean difference **in the population** is consistent with the data? Based on the previous questions, why can we **not** take this as evidence of discrimination? Answer in 2-3 sentences.
+
+```{r}
+## (i) add Minority to dds_cat
+dds_cat <- ...
+
+## (ii) difference in mean expenditure
+compute_mean_diff <- function(data) {
+  ...
+}
+compute_mean_diff(dds_cat)
+
+## (iii) bootstrap
+set.seed(100)
+n_bootstrap <- 1000
+boot_mean_diff <- numeric(n_bootstrap)
+for (rep_id in 1:n_bootstrap) {
+  ...
+}
+
+## 95% confidence interval and histogram
+...
+```
+
+_Type your answer here, replacing this text._
+
+### Question 8: Using IPW to adjust for age
+
+In the sampling lecture, we used inverse probability weighting to correct for hawks being sampled unevenly by sex: each hawk received the weight $w_i = 1/p_i$, and the estimate was the weighted mean $\sum_i w_i Y_i / \sum_i w_i$. Here, we'll use the same idea to correct for minority and non-minority consumers having different age distributions.
+
+Let $Z_i$ indicate whether consumer $i$ is a minority, $Y_i$ be their expenditure, and $X_i$ be their age cohort. The **propensity score** $e(X_i)$ is the probability that a consumer in age cohort $X_i$ is a minority. We estimate it by the fraction of consumers in that cohort who are minorities.
+
+The age-adjusted mean for each group is a weighted mean:
+
+$$
+\hat\mu_\text{minority} = \frac{\sum_{i:\, Z_i = 1} w_i Y_i}{\sum_{i:\, Z_i = 1} w_i} \quad \text{with } w_i = \frac{1}{e(X_i)}
+$$
+
+$$
+\hat\mu_\text{non-minority} = \frac{\sum_{i:\, Z_i = 0} w_i Y_i}{\sum_{i:\, Z_i = 0} w_i} \quad \text{with } w_i = \frac{1}{1 - e(X_i)}
+$$
+
+and the **age-adjusted difference** is $\hat\mu_\text{minority} - \hat\mu_\text{non-minority}$. Minority consumers in cohorts where minorities are rare get large weights, and vice versa. After weighting, both groups have the same age distribution as the full sample, so age no longer confounds the comparison.
+
+- (i) Write a function, `compute_adjusted_diff`, that takes a data frame and returns the age-adjusted difference. First add the propensity score as a column `e_x` (hint: `` group_by(`Age Cohort`) |> mutate(e_x = mean(Minority)) |> ungroup() ``), then compute the weights and the two weighted means. Apply it to `dds_cat`.
+
+- (ii) Bootstrap `compute_adjusted_diff` 1000 times, as in Question 7. Plot a histogram of the bootstrap distribution with a dashed vertical line at 0, and compute a 95% bootstrap percentile confidence interval.
+
+```{r}
+## (i) IPW age-adjusted difference
+compute_adjusted_diff <- function(data) {
+  ...
+}
+compute_adjusted_diff(dds_cat)
+
+## (ii) bootstrap
+set.seed(101)
+boot_adjusted_diff <- numeric(n_bootstrap)
+for (rep_id in 1:n_bootstrap) {
+  ...
+}
+
+## 95% confidence interval and histogram
+...
+```
+
+### Question 9: Interpreting the IPW results
+
+Based on your 95% confidence interval, what range of values for the age-adjusted difference in the population is consistent with the data? How does this compare to the unadjusted interval from Question 7? Does there still seem to be a difference in expenditures after adjusting for age? Answer in 2-3 sentences.
+
+_Type your answer here, replacing this text._
+
+# Regression analysis
+
+As an alternative to IPW, we can adjust for age with a linear model. Regression lets us adjust for age and gender at the same time, and compare each ethnic group with White non-Hispanic consumers separately.
+
+We'll model the log of expenditures as a function of age cohort, gender, and ethnicity:
+
+$$
+\begin{aligned}
+\log(\text{expend}_i) = \beta_0 &+ \underbrace{\beta_1 (\text{6 to 12})_i + \cdots + \beta_5 (\text{51+})_i}_\text{age cohort} + \underbrace{\beta_6\, (\text{male})_i}_\text{gender} \\
+&+ \underbrace{\beta_7\, (\text{American Indian})_i + \cdots + \beta_{10}\, (\text{Hispanic})_i + \cdots + \beta_{13}\, (\text{Other})_i}_\text{ethnicity} + \varepsilon_i
+\end{aligned}
+$$
+
+Each term in parentheses is an **indicator**: it is 1 if consumer $i$ is in that group and 0 otherwise. As in the lecture's population-density example, each categorical variable has a **reference level** with no indicator: "0 to 5" for age cohort, female for gender, and, for ethnicity, the largest group, "White not Hispanic", which we set with `fct_relevel`:
+
+```{r}
+dds_lm <- dds_cat |>
+  mutate(Ethnicity = fct_relevel(Ethnicity, "White not Hispanic"))
+```
+
+For a female, White non-Hispanic consumer aged 0 to 5, all of the indicators are 0, so the model's value is $\beta_0$. For a male, Hispanic consumer aged 0 to 5, it is $\beta_0 + \beta_6 + \beta_{10}$.
+
+**Interpreting the coefficients.** As in lecture, each coefficient compares consumers who differ in one variable but have the *same values of the other variables*. For example, $\beta_{10}$ is the difference in average log expenditure between Hispanic and White non-Hispanic consumers *of the same age cohort and gender*. As always, the target is the population least squares coefficients: the best approximation of this form to the whole population of DDS consumers.
+
+**Interpreting the log scale.** Expenditures are very skewed and grow roughly multiplicatively with age, so we model the log of expenditures. A difference of $b$ in log expenditure means that expenditures are $e^b$ *times* as large. For example, $e^{0.1} \approx 1.105$, so a coefficient of 0.1 means expenditures are typically about 10.5% higher; $e^{-0.04} \approx 0.96$, so a coefficient of $-0.04$ means they are about 4% lower. Exponentiated coefficients compare *typical* expenditures. (Technically, $e^{\text{average of } \log Y}$ is the *geometric mean* of $Y$.)
+
+### Question 10: Model fitting
+
+Fit the linear regression of `log(Expenditures)` on `Age Cohort`, `Gender`, and `Ethnicity` (in that order), using `dds_lm`. Store the result as `expenditures_fit`.
+
+The rest of the code stores the estimates and standard errors as a tidy data frame, `coef_tbl`, with an extra column `ratio = exp(estimate)`. (We drop the `statistic` and `p.value` columns from `tidy()`, because they add a normal-distribution assumption that we don't make in this class.)
+
+```{r}
+expenditures_fit <- ...
+
+coef_tbl <- tidy(expenditures_fit) |>
+  mutate(ratio = exp(estimate)) |>
+  select(term, estimate, std.error, ratio)
+print(coef_tbl, n = 15)
+```
+
+For example, the estimate for `GenderMale` is about $-0.04$. Comparing consumers of the same age cohort and ethnicity, the average log expenditure is 0.04 lower for male consumers than for female consumers. Since $e^{-0.04} \approx 0.96$, male consumers' expenditures are typically about 4% lower: a small difference. Could it be due to sampling variability? The `std.error` is about 0.02, so the estimate is about two standard errors from 0, which is borderline. We'll come back to this with the bootstrap in Question 12.
+
+### Question 11: Interpretation
+
+Answer in 3-5 sentences total.
+
+- (i) Are the differences between age cohorts large compared with their standard errors? How many *times* larger are expenditures typically for a consumer aged 51+ than for a consumer aged 0 to 5 of the same gender and ethnicity? (Hint: use the `ratio` column.)
+
+- (ii) Are any of the ethnicity coefficients large compared with their standard errors? Interpret the `EthnicityHispanic` coefficient on the ratio scale.
+
+- (iii) Which ethnicity coefficients have the largest standard errors, and why? (Look back at Question 2.)
+
+_Type your answer here, replacing this text._
+
+### Question 12: Bootstrap confidence intervals
+
+The `std.error` column comes from a formula that assumes the spread of log expenditures around the model is the same for every consumer. As in lecture, we'll use the **paired bootstrap** instead, which doesn't need that assumption.
+
+- (i) Resample whole rows of `dds_lm` with replacement 1000 times. For each bootstrap sample, refit the model from Question 10 and save three coefficients: `EthnicityHispanic`, `GenderMale`, and `` `Age Cohort`22 to 50 ``. The code below pulls these out by name with `coef(boot_fit)[terms]`. We don't save the whole coefficient vector because the small groups from Question 2 are missing from some bootstrap samples, and `lm()` then returns fewer coefficients.
+
+- (ii) Complete the table `boot_summary`. For each of the three coefficients, it should show the estimate, the formula standard error (`std.error` from Question 10), the bootstrap standard error, and a 95% bootstrap percentile confidence interval. Exponentiate the interval for `EthnicityHispanic` and interpret it in one sentence, comparing consumers of the same age cohort and gender. Is there evidence of a gender difference?
+
+- (iii) The two standard errors are about the same for `EthnicityHispanic` and `GenderMale`, but not for `` `Age Cohort`22 to 50 ``. Compute the standard deviation of log expenditures within each age cohort, and use it to explain why. (Hint: the `22 to 50` coefficient compares the 22-50 cohort with the 0-5 cohort. What does the formula assume about the spread?)
+
+```{r}
+terms <- c("EthnicityHispanic", "GenderMale", "`Age Cohort`22 to 50")
+
+## (i) paired bootstrap
+set.seed(200)
+boot_coefs <- matrix(NA, nrow = n_bootstrap, ncol = length(terms),
+                     dimnames = list(NULL, terms))
+for (rep_id in 1:n_bootstrap) {
+  boot_dds <- ...  # resample whole rows of dds_lm
+  boot_fit <- ...  # refit the Question 10 model
+  boot_coefs[rep_id, ] <- coef(boot_fit)[terms]
+}
+
+## (ii) summary table: one row per coefficient
+boot_summary <- tibble(
+  term = terms,
+  estimate = ...,
+  formula_se = ...,
+  boot_se = ...,
+  lower = ...,
+  upper = ...
+)
+boot_summary
+
+## Hispanic interval on the ratio scale
+...
+
+## (iii) standard deviation of log expenditures in each age cohort
+...
+```
+
+_Type your answer here, replacing this text._
+
+### Question 13: Summary
+
+Write a one-paragraph summary of your analysis. Focus on answering the question, 'do the data provide evidence of ethnic or gender discrimination in allocation of DDS funds?'
+
+Your summary should include the following:
+
+- a description of the data indicating observations, variables, and sampling mechanism;
+
+- a description of any important exploratory findings;
+
+- a description of the methods you used to analyze the data (don't worry about capturing every detail);
+
+- a description of the findings of the analysis, including confidence intervals;
+
+- an answer to the question.
+
+_Type your answer here, replacing this text._
